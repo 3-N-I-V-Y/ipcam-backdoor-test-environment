@@ -1,0 +1,40 @@
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    ports:
+      - "8554:8554"
+    volumes:
+      - ./services/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+    healthcheck:
+      test: ["CMD", "/mediamtx", "--version"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  control-server:
+    build: ./services/control-server
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mock-camera:
+    build: ./services/mock-camera
+    depends_on:
+      mediamtx:
+        condition: service_healthy
+      control-server:
+        condition: service_healthy
+    environment:
+      RTSP_URL: rtsp://mediamtx:8554/cam1
+      CONTROL_URL: http://control-server:8080
+      VIDEO_FILE: /samples/demo.mp4
+    volumes:
+      - ./samples:/samples:ro

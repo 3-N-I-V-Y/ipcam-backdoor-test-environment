@@ -1,0 +1,5 @@
+logLevel: info
+logDestinations: [stdout]
+
+paths:
+  cam1: {}
