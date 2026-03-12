@@ -35,10 +35,17 @@ services:
     ports:
       - "8090:8090"
     environment:
+      RUN_MODE: docker
       CAMERA_ID: camera-app-001
       LAB_MODE: ${CAMERA_APP_LAB_MODE:-none}
+      SOURCE_TYPE: ${CAMERA_APP_SOURCE_TYPE:-file}
       RTSP_URL: rtsp://mediamtx:8554/cam1
       INPUT_SOURCE: /samples/demo.mp4
+      WEBCAM_BACKEND: ${CAMERA_APP_WEBCAM_BACKEND:-v4l2}
+      WEBCAM_DEVICE: ${CAMERA_APP_WEBCAM_DEVICE:-/dev/video0}
+      WEBCAM_FRAMERATE: ${CAMERA_APP_WEBCAM_FRAMERATE:-30}
+      WEBCAM_RESOLUTION: ${CAMERA_APP_WEBCAM_RESOLUTION:-1280x720}
+      WEBCAM_INPUT_FORMAT: ${CAMERA_APP_WEBCAM_INPUT_FORMAT:-}
       API_HOST: 0.0.0.0
       API_PORT: 8090
       CONTROL_URL: ${CAMERA_APP_CONTROL_URL:-http://control-server:8080}

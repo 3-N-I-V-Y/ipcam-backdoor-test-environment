@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from pathlib import Path
 import subprocess
 import threading
 import time
 
+from source import CameraSource
 from state import CameraState
 
 
 @dataclass(slots=True)
 class StreamerConfig:
-    input_source: str
+    source: CameraSource
     rtsp_url: str
     ffmpeg_binary: str = "ffmpeg"
     restart_delay_seconds: float = 3.0
@@ -56,9 +56,10 @@ class StreamerSupervisor:
 
     def _run_loop(self) -> None:
         while not self._stop_event.is_set():
-            input_path = Path(self._config.input_source)
-            if not input_path.exists():
-                error = f"input source not found: {self._config.input_source}"
+            try:
+                self._config.source.validate()
+            except (OSError, ValueError) as exc:
+                error = str(exc)
                 self._logger.error(error)
                 self._state.mark_stream_retrying(exit_code=None, error=error)
                 self._wait_before_retry()
@@ -116,13 +117,8 @@ class StreamerSupervisor:
             "-hide_banner",
             "-loglevel",
             "warning",
-            "-re",
-            "-stream_loop",
-            "-1",
-            "-i",
-            self._config.input_source,
-            "-c",
-            "copy",
+            *self._config.source.ffmpeg_input_args(),
+            *self._config.source.ffmpeg_codec_args(),
             "-f",
             "rtsp",
             self._config.rtsp_url,

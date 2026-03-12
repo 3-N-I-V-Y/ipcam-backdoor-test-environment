@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 import logging
 import os
+from pathlib import Path
+import platform
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -11,6 +13,7 @@ import uvicorn
 
 from beacon import BeaconConfig, BeaconWorker
 from poller import PollerConfig, TaskPoller
+from source import create_camera_source
 from state import CameraState
 from streamer import StreamerConfig, StreamerSupervisor
 
@@ -22,13 +25,23 @@ logging.basicConfig(
 logger = logging.getLogger("camera-app")
 
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
 @dataclass(slots=True)
 class AppConfig:
+    run_mode: str
     camera_id: str
     lab_mode: str
     beacon_enabled: bool
     poll_enabled: bool
+    source_type: str
     input_source: str
+    webcam_backend: str
+    webcam_device: str
+    webcam_framerate: int
+    webcam_resolution: str
+    webcam_input_format: str | None
     rtsp_url: str
     control_url: str
     api_host: str
@@ -43,17 +56,29 @@ class AppConfig:
 
     @classmethod
     def from_env(cls) -> "AppConfig":
+        run_mode = parse_run_mode(os.getenv("RUN_MODE", "docker"))
         lab_mode, features = parse_lab_mode(os.getenv("LAB_MODE", "none"))
+        source_type = os.getenv("SOURCE_TYPE", "file").strip().lower()
+        webcam_backend = os.getenv("WEBCAM_BACKEND", default_webcam_backend(run_mode)).strip().lower()
+        webcam_device = os.getenv("WEBCAM_DEVICE", default_webcam_device(webcam_backend)).strip()
+        webcam_input_format = os.getenv("WEBCAM_INPUT_FORMAT", "").strip() or None
 
         return cls(
+            run_mode=run_mode,
             camera_id=os.getenv("CAMERA_ID", "camera-app-001"),
             lab_mode=lab_mode,
             beacon_enabled="beacon" in features,
             poll_enabled="poll" in features,
-            input_source=os.getenv("INPUT_SOURCE", "/samples/demo.mp4"),
-            rtsp_url=os.getenv("RTSP_URL", "rtsp://mediamtx:8554/cam1"),
-            control_url=os.getenv("CONTROL_URL", "http://control-server:8080"),
-            api_host=os.getenv("API_HOST", "0.0.0.0"),
+            source_type=source_type,
+            input_source=os.getenv("INPUT_SOURCE", default_input_source(run_mode)),
+            webcam_backend=webcam_backend,
+            webcam_device=webcam_device,
+            webcam_framerate=int(os.getenv("WEBCAM_FRAMERATE", "30")),
+            webcam_resolution=os.getenv("WEBCAM_RESOLUTION", "1280x720"),
+            webcam_input_format=webcam_input_format,
+            rtsp_url=os.getenv("RTSP_URL", default_rtsp_url(run_mode)),
+            control_url=os.getenv("CONTROL_URL", default_control_url(run_mode)),
+            api_host=os.getenv("API_HOST", default_api_host(run_mode)),
             api_port=int(os.getenv("API_PORT", "8090")),
             ffmpeg_binary=os.getenv("FFMPEG_BIN", "ffmpeg"),
             restart_delay_seconds=float(os.getenv("RESTART_DELAY_SECONDS", "3")),
@@ -63,6 +88,13 @@ class AppConfig:
             poll_interval_seconds=float(os.getenv("POLL_INTERVAL_SECONDS", "10")),
             poll_timeout_seconds=float(os.getenv("POLL_TIMEOUT_SECONDS", "3")),
         )
+
+
+def parse_run_mode(raw_value: str) -> str:
+    normalized = raw_value.strip().lower() or "docker"
+    if normalized not in {"docker", "local"}:
+        raise ValueError("RUN_MODE must be one of: docker, local")
+    return normalized
 
 
 def parse_lab_mode(raw_value: str) -> tuple[str, set[str]]:
@@ -79,12 +111,59 @@ def parse_lab_mode(raw_value: str) -> tuple[str, set[str]]:
     return ",".join(sorted(tokens)), tokens
 
 
+def default_input_source(run_mode: str) -> str:
+    if run_mode == "local":
+        return str(REPO_ROOT / "samples" / "demo.mp4")
+    return "/samples/demo.mp4"
+
+
+def default_webcam_backend(run_mode: str) -> str:
+    if run_mode == "local" and platform.system().lower() == "windows":
+        return "dshow"
+    return "v4l2"
+
+
+def default_webcam_device(webcam_backend: str) -> str:
+    if webcam_backend == "dshow":
+        return ""
+    return "/dev/video0"
+
+
+def default_rtsp_url(run_mode: str) -> str:
+    if run_mode == "local":
+        return "rtsp://localhost:8554/cam1"
+    return "rtsp://mediamtx:8554/cam1"
+
+
+def default_control_url(run_mode: str) -> str:
+    if run_mode == "local":
+        return "http://localhost:8080"
+    return "http://control-server:8080"
+
+
+def default_api_host(run_mode: str) -> str:
+    if run_mode == "local":
+        return "127.0.0.1"
+    return "0.0.0.0"
+
+
 def create_app() -> FastAPI:
     config = AppConfig.from_env()
+    source = create_camera_source(
+        source_type=config.source_type,
+        file_path=config.input_source,
+        webcam_device=config.webcam_device,
+        webcam_backend=config.webcam_backend,
+        webcam_framerate=config.webcam_framerate,
+        webcam_resolution=config.webcam_resolution,
+        webcam_input_format=config.webcam_input_format,
+    )
     state = CameraState(
         camera_id=config.camera_id,
-        source_kind="file",
-        source_uri=config.input_source,
+        run_mode=config.run_mode,
+        source_kind=source.kind,
+        source_uri=source.uri,
+        source_details=source.state_fields(),
         rtsp_url=config.rtsp_url,
         lab_mode=config.lab_mode,
     )
@@ -100,7 +179,7 @@ def create_app() -> FastAPI:
     )
     streamer = StreamerSupervisor(
         config=StreamerConfig(
-            input_source=config.input_source,
+            source=source,
             rtsp_url=config.rtsp_url,
             ffmpeg_binary=config.ffmpeg_binary,
             restart_delay_seconds=config.restart_delay_seconds,
@@ -133,7 +212,12 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        logger.info("camera-app starting with lab_mode=%s", config.lab_mode)
+        logger.info(
+            "camera-app starting with run_mode=%s lab_mode=%s source_type=%s",
+            config.run_mode,
+            config.lab_mode,
+            config.source_type,
+        )
         streamer.start()
         beacon.start()
         poller.start()

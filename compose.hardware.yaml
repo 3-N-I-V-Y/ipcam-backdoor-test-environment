@@ -1,0 +1,12 @@
+services:
+  camera-app:
+    # Linux/V4L2 host override for real webcam input.
+    environment:
+      SOURCE_TYPE: webcam
+      WEBCAM_BACKEND: ${CAMERA_APP_WEBCAM_BACKEND:-v4l2}
+      WEBCAM_DEVICE: ${CAMERA_APP_WEBCAM_DEVICE:-/dev/video0}
+      WEBCAM_FRAMERATE: ${CAMERA_APP_WEBCAM_FRAMERATE:-30}
+      WEBCAM_RESOLUTION: ${CAMERA_APP_WEBCAM_RESOLUTION:-1280x720}
+      WEBCAM_INPUT_FORMAT: ${CAMERA_APP_WEBCAM_INPUT_FORMAT:-}
+    devices:
+      - "${CAMERA_APP_WEBCAM_DEVICE:-/dev/video0}:${CAMERA_APP_WEBCAM_DEVICE:-/dev/video0}"

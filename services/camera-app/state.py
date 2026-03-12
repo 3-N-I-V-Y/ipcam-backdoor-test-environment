@@ -20,21 +20,27 @@ class CameraState:
         self,
         *,
         camera_id: str,
+        run_mode: str,
         source_kind: str,
         source_uri: str,
+        source_details: dict[str, Any] | None = None,
         rtsp_url: str,
         lab_mode: str,
     ) -> None:
         self._lock = threading.RLock()
         self._started_at_monotonic = time.monotonic()
+        source = {
+            "kind": source_kind,
+            "uri": source_uri,
+        }
+        if source_details:
+            source.update(source_details)
         self._status: dict[str, Any] = {
             "camera_id": camera_id,
+            "run_mode": run_mode,
             "lab_mode": lab_mode,
             "started_at": utc_now(),
-            "source": {
-                "kind": source_kind,
-                "uri": source_uri,
-            },
+            "source": source,
             "stream": {
                 "status": "idle",
                 "target_url": rtsp_url,
