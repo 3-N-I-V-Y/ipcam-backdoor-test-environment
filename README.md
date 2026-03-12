@@ -61,6 +61,7 @@ docker compose up -d --build
 - `camera-app`은 호스트에서 직접 실행
 - `camera-app`은 `RUN_MODE=local` 로 동작
 - 기본 RTSP publish 대상은 `rtsp://localhost:8554/cam1`
+- 기본 RTSP publish transport는 `tcp`
 - 기본 control API 대상은 `http://localhost:8080`
 
 이 모드는 웹캠 접근, ffmpeg 인자, OS별 장치 문제를 디버깅할 때 유리하다.
@@ -92,31 +93,50 @@ docker compose up -d --build
 docker compose up -d mediamtx control-server
 ```
 
-2. 로컬 Python 의존성을 설치한다.
+2. `camera-app` 전용 가상환경을 만든다. 처음 한 번만 하면 된다.
 
 ```powershell
-py -3 -m pip install -r services/camera-app/requirements.txt
+py -3 -m venv services/camera-app/.venv
 ```
 
-`py` 또는 `python` 실행기가 막혀 있으면 `PYTHON_BIN`에 직접 경로를 지정해도 된다.
+3. 가상환경에 로컬 Python 의존성을 설치한다.
+
+```powershell
+.\services\camera-app\.venv\Scripts\python.exe -m pip install -r services/camera-app/requirements.txt
+```
+
+`py` 또는 `python` 실행기를 직접 지정해야 하면 `PYTHON_BIN`에 경로를 넣어도 된다.
 
 ```powershell
 $env:PYTHON_BIN="C:\path\to\python.exe"
 & $env:PYTHON_BIN -m pip install -r services/camera-app/requirements.txt
 ```
 
-3. `camera-app`을 로컬로 실행한다.
+4. `camera-app`을 로컬로 실행한다.
 
 Windows PowerShell:
 
 ```powershell
-.\services\camera-app\run-local.ps1
+powershell -ExecutionPolicy Bypass -File ".\services\camera-app\run-local.ps1"
 ```
 
 Linux/macOS:
 
 ```bash
 ./services/camera-app/run-local.sh
+```
+
+현재 PowerShell 세션에서만 스크립트 실행을 허용하고 싶으면 아래처럼 실행해도 된다.
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\services\camera-app\run-local.ps1
+```
+
+스크립트를 쓰지 않고 직접 실행해도 된다.
+
+```powershell
+.\services\camera-app\.venv\Scripts\python.exe .\services\camera-app\main.py
 ```
 
 기본값:
@@ -127,8 +147,15 @@ Linux/macOS:
 - `CONTROL_URL=http://localhost:8080`
 - `API_HOST=127.0.0.1`
 - `API_PORT=8090`
+- `RTSP_TRANSPORT=tcp`
 
-`PYTHON_BIN`이 설정되어 있으면 `run-local.ps1` / `run-local.sh`는 그 실행기를 우선 사용한다.
+`run-local.ps1` / `run-local.sh`는 아래 우선순서로 Python 실행기를 찾는다.
+
+1. `PYTHON_BIN`
+2. `services/camera-app/.venv`
+3. 시스템 `py` 또는 `python`
+
+로컬 모드에서는 `camera-app`이 기본적으로 `RTSP_TRANSPORT=tcp`로 publish한다. 호스트에서 실행한 `ffmpeg`가 Docker의 `mediamtx`로 붙을 때 가장 안정적이다.
 
 ## 로컬 웹캠 사용
 
@@ -153,11 +180,13 @@ ffmpeg -list_devices true -f dshow -i dummy
 
 2. 확인한 장치 이름으로 `camera-app`을 실행한다.
 
+`ffmpeg -list_devices` 출력의 `(video)` 표시는 장치 타입 설명일 뿐 장치 이름 일부가 아니다. `Integrated Webcam (video)` 전체를 넣지 말고 장치 이름만 넣는다.
+
 ```powershell
 $env:SOURCE_TYPE="webcam"
 $env:WEBCAM_BACKEND="dshow"
-$env:WEBCAM_DEVICE="Integrated Camera"
-.\services\camera-app\run-local.ps1
+$env:WEBCAM_DEVICE="Integrated Webcam"
+powershell -ExecutionPolicy Bypass -File ".\services\camera-app\run-local.ps1"
 ```
 
 선택적으로 픽셀 포맷을 지정할 수 있다.
@@ -184,11 +213,14 @@ $env:WEBCAM_INPUT_FORMAT="mjpeg"
   - `dshow`
 - `WEBCAM_DEVICE`
   - `v4l2`: `/dev/video0` 같은 장치 경로
-  - `dshow`: `Integrated Camera` 같은 Windows 장치 이름
+  - `dshow`: `Integrated Webcam` 같은 Windows 장치 이름
 - `INPUT_SOURCE`
   - `file` 소스일 때 사용할 입력 파일
 - `RTSP_URL`
   - mediamtx publish 대상
+- `RTSP_TRANSPORT`
+  - `tcp`: interleaved RTSP over TCP. 로컬 host -> Docker `mediamtx` 조합의 기본값
+  - `udp`: RTP/RTCP over UDP. 필요하면 `mediamtx`의 UDP 포트(`8000/8001`)도 열려 있어야 한다.
 - `CONTROL_URL`
   - beacon / poll-task 대상 control server 주소
 

@@ -10,6 +10,10 @@ if [ -n "${PYTHON_BIN:-}" ]; then
   exec "$PYTHON_BIN" ./main.py
 fi
 
+if [ -x "$SCRIPT_DIR/.venv/bin/python" ]; then
+  exec "$SCRIPT_DIR/.venv/bin/python" ./main.py
+fi
+
 if command -v python3 >/dev/null 2>&1; then
   exec python3 ./main.py
 fi

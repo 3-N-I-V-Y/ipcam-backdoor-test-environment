@@ -14,6 +14,7 @@ from state import CameraState
 class StreamerConfig:
     source: CameraSource
     rtsp_url: str
+    rtsp_transport: str = "tcp"
     ffmpeg_binary: str = "ffmpeg"
     restart_delay_seconds: float = 3.0
     publish_probe_seconds: float = 1.5
@@ -119,6 +120,8 @@ class StreamerSupervisor:
             "warning",
             *self._config.source.ffmpeg_input_args(),
             *self._config.source.ffmpeg_codec_args(),
+            "-rtsp_transport",
+            self._config.rtsp_transport,
             "-f",
             "rtsp",
             self._config.rtsp_url,

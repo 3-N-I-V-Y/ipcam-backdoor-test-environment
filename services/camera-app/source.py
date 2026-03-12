@@ -5,6 +5,26 @@ from pathlib import Path
 from typing import Any, Protocol
 
 
+def normalize_dshow_device_name(raw_device: str) -> str:
+    value = raw_device.strip()
+
+    if value.lower().startswith("video="):
+        value = value[6:].strip()
+
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        value = value[1:-1].strip()
+
+    for suffix in (' (video)', ' (audio)'):
+        if value.lower().endswith(suffix):
+            value = value[: -len(suffix)].rstrip()
+            break
+
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        value = value[1:-1].strip()
+
+    return value
+
+
 class CameraSource(Protocol):
     kind: str
     uri: str
@@ -65,6 +85,12 @@ class WebcamSource:
     resolution: str = "1280x720"
     input_format: str | None = None
     kind: str = "webcam"
+
+    def __post_init__(self) -> None:
+        self.device = self.device.strip()
+
+        if self.backend == "dshow":
+            self.device = normalize_dshow_device_name(self.device)
 
     @property
     def uri(self) -> str:

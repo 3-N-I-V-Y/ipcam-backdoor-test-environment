@@ -10,6 +10,11 @@ if ($env:PYTHON_BIN) {
     exit $LASTEXITCODE
 }
 
+if (Test-Path .\.venv\Scripts\python.exe) {
+    & .\.venv\Scripts\python.exe .\main.py
+    exit $LASTEXITCODE
+}
+
 if (Get-Command py -ErrorAction SilentlyContinue) {
     & py -3 .\main.py
     exit $LASTEXITCODE

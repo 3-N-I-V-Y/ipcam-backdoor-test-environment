@@ -43,6 +43,7 @@ class AppConfig:
     webcam_resolution: str
     webcam_input_format: str | None
     rtsp_url: str
+    rtsp_transport: str
     control_url: str
     api_host: str
     api_port: int
@@ -77,6 +78,9 @@ class AppConfig:
             webcam_resolution=os.getenv("WEBCAM_RESOLUTION", "1280x720"),
             webcam_input_format=webcam_input_format,
             rtsp_url=os.getenv("RTSP_URL", default_rtsp_url(run_mode)),
+            rtsp_transport=parse_rtsp_transport(
+                os.getenv("RTSP_TRANSPORT", default_rtsp_transport(run_mode))
+            ),
             control_url=os.getenv("CONTROL_URL", default_control_url(run_mode)),
             api_host=os.getenv("API_HOST", default_api_host(run_mode)),
             api_port=int(os.getenv("API_PORT", "8090")),
@@ -135,6 +139,19 @@ def default_rtsp_url(run_mode: str) -> str:
     return "rtsp://mediamtx:8554/cam1"
 
 
+def parse_rtsp_transport(raw_value: str) -> str:
+    normalized = raw_value.strip().lower() or "tcp"
+    if normalized not in {"tcp", "udp"}:
+        raise ValueError("RTSP_TRANSPORT must be one of: tcp, udp")
+    return normalized
+
+
+def default_rtsp_transport(run_mode: str) -> str:
+    if run_mode == "local":
+        return "tcp"
+    return "udp"
+
+
 def default_control_url(run_mode: str) -> str:
     if run_mode == "local":
         return "http://localhost:8080"
@@ -181,6 +198,7 @@ def create_app() -> FastAPI:
         config=StreamerConfig(
             source=source,
             rtsp_url=config.rtsp_url,
+            rtsp_transport=config.rtsp_transport,
             ffmpeg_binary=config.ffmpeg_binary,
             restart_delay_seconds=config.restart_delay_seconds,
             publish_probe_seconds=config.publish_probe_seconds,
@@ -213,10 +231,11 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         logger.info(
-            "camera-app starting with run_mode=%s lab_mode=%s source_type=%s",
+            "camera-app starting with run_mode=%s lab_mode=%s source_type=%s rtsp_transport=%s",
             config.run_mode,
             config.lab_mode,
             config.source_type,
+            config.rtsp_transport,
         )
         streamer.start()
         beacon.start()
