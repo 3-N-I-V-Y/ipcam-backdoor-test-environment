@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 from beacon import BeaconConfig, BeaconWorker
+from poller import PollerConfig, TaskPoller
 from state import CameraState
 from streamer import StreamerConfig, StreamerSupervisor
 
@@ -25,6 +26,8 @@ logger = logging.getLogger("camera-app")
 class AppConfig:
     camera_id: str
     lab_mode: str
+    beacon_enabled: bool
+    poll_enabled: bool
     input_source: str
     rtsp_url: str
     control_url: str
@@ -35,16 +38,18 @@ class AppConfig:
     publish_probe_seconds: float
     beacon_interval_seconds: float
     beacon_timeout_seconds: float
+    poll_interval_seconds: float
+    poll_timeout_seconds: float
 
     @classmethod
     def from_env(cls) -> "AppConfig":
-        lab_mode = os.getenv("LAB_MODE", "none").strip().lower()
-        if lab_mode not in {"none", "beacon"}:
-            raise ValueError("LAB_MODE must be one of: none, beacon")
+        lab_mode, features = parse_lab_mode(os.getenv("LAB_MODE", "none"))
 
         return cls(
             camera_id=os.getenv("CAMERA_ID", "camera-app-001"),
             lab_mode=lab_mode,
+            beacon_enabled="beacon" in features,
+            poll_enabled="poll" in features,
             input_source=os.getenv("INPUT_SOURCE", "/samples/demo.mp4"),
             rtsp_url=os.getenv("RTSP_URL", "rtsp://mediamtx:8554/cam1"),
             control_url=os.getenv("CONTROL_URL", "http://control-server:8080"),
@@ -55,7 +60,23 @@ class AppConfig:
             publish_probe_seconds=float(os.getenv("PUBLISH_PROBE_SECONDS", "1.5")),
             beacon_interval_seconds=float(os.getenv("BEACON_INTERVAL_SECONDS", "10")),
             beacon_timeout_seconds=float(os.getenv("BEACON_TIMEOUT_SECONDS", "3")),
+            poll_interval_seconds=float(os.getenv("POLL_INTERVAL_SECONDS", "10")),
+            poll_timeout_seconds=float(os.getenv("POLL_TIMEOUT_SECONDS", "3")),
         )
+
+
+def parse_lab_mode(raw_value: str) -> tuple[str, set[str]]:
+    normalized = raw_value.strip().lower()
+    if not normalized or normalized == "none":
+        return "none", set()
+
+    tokens = {token.strip() for token in normalized.split(",") if token.strip()}
+    allowed = {"beacon", "poll"}
+    invalid = sorted(tokens - allowed)
+    if invalid:
+        raise ValueError("LAB_MODE must contain only: none, beacon, poll")
+
+    return ",".join(sorted(tokens)), tokens
 
 
 def create_app() -> FastAPI:
@@ -68,9 +89,14 @@ def create_app() -> FastAPI:
         lab_mode=config.lab_mode,
     )
     state.configure_beacon(
-        enabled=config.lab_mode == "beacon",
+        enabled=config.beacon_enabled,
         target_url=config.control_url,
         interval_seconds=config.beacon_interval_seconds,
+    )
+    state.configure_poller(
+        enabled=config.poll_enabled,
+        target_url=config.control_url,
+        interval_seconds=config.poll_interval_seconds,
     )
     streamer = StreamerSupervisor(
         config=StreamerConfig(
@@ -85,7 +111,7 @@ def create_app() -> FastAPI:
     )
     beacon = BeaconWorker(
         config=BeaconConfig(
-            enabled=config.lab_mode == "beacon",
+            enabled=config.beacon_enabled,
             control_url=config.control_url,
             interval_seconds=config.beacon_interval_seconds,
             request_timeout_seconds=config.beacon_timeout_seconds,
@@ -93,16 +119,29 @@ def create_app() -> FastAPI:
         state=state,
         logger=logging.getLogger("camera-app.beacon"),
     )
+    poller = TaskPoller(
+        config=PollerConfig(
+            enabled=config.poll_enabled,
+            control_url=config.control_url,
+            camera_id=config.camera_id,
+            interval_seconds=config.poll_interval_seconds,
+            request_timeout_seconds=config.poll_timeout_seconds,
+        ),
+        state=state,
+        logger=logging.getLogger("camera-app.poller"),
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         logger.info("camera-app starting with lab_mode=%s", config.lab_mode)
         streamer.start()
         beacon.start()
+        poller.start()
         try:
             yield
         finally:
             logger.info("camera-app shutting down")
+            poller.stop()
             beacon.stop()
             streamer.stop()
 

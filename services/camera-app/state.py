@@ -60,6 +60,23 @@ class CameraState:
                 "last_error": None,
                 "consecutive_failures": 0,
             },
+            "poller": {
+                "enabled": False,
+                "status": "disabled",
+                "target_url": None,
+                "interval_seconds": None,
+                "last_poll_at": None,
+                "last_result_posted_at": None,
+                "last_result_response_status": None,
+                "last_error": None,
+                "consecutive_failures": 0,
+                "last_task_id": None,
+                "last_task_command": None,
+                "last_task_status": None,
+                "last_task_received_at": None,
+                "last_task_completed_at": None,
+                "last_task_result": None,
+            },
             "markers": deque(maxlen=50),
             "updated_at": utc_now(),
         }
@@ -177,6 +194,104 @@ class CameraState:
             if not beacon["enabled"]:
                 return
             beacon["status"] = "stopped"
+            self._touch()
+
+    def configure_poller(
+        self,
+        *,
+        enabled: bool,
+        target_url: str | None,
+        interval_seconds: float | None,
+    ) -> None:
+        with self._lock:
+            poller = self._status["poller"]
+            poller["enabled"] = enabled
+            poller["status"] = "idle" if enabled else "disabled"
+            poller["target_url"] = target_url if enabled else None
+            poller["interval_seconds"] = interval_seconds if enabled else None
+            poller["last_error"] = None
+            self._touch()
+
+    def mark_polling(self) -> None:
+        with self._lock:
+            poller = self._status["poller"]
+            if not poller["enabled"]:
+                return
+            poller["status"] = "polling"
+            poller["last_poll_at"] = utc_now()
+            poller["last_error"] = None
+            self._touch()
+
+    def mark_poll_idle(self) -> None:
+        with self._lock:
+            poller = self._status["poller"]
+            if not poller["enabled"]:
+                return
+            poller["status"] = "idle"
+            poller["last_error"] = None
+            poller["consecutive_failures"] = 0
+            self._touch()
+
+    def mark_task_received(self, *, task_id: str, command: str) -> None:
+        with self._lock:
+            poller = self._status["poller"]
+            if not poller["enabled"]:
+                return
+            poller["status"] = "executing"
+            poller["last_task_id"] = task_id
+            poller["last_task_command"] = command
+            poller["last_task_status"] = "received"
+            poller["last_task_received_at"] = utc_now()
+            poller["last_task_result"] = None
+            poller["last_error"] = None
+            self._touch()
+
+    def mark_task_finished(self, *, task_id: str, command: str, result: dict[str, Any]) -> None:
+        with self._lock:
+            poller = self._status["poller"]
+            if not poller["enabled"]:
+                return
+            poller["status"] = "idle"
+            poller["last_task_id"] = task_id
+            poller["last_task_command"] = command
+            poller["last_task_status"] = "completed" if result.get("success") else "failed"
+            poller["last_task_completed_at"] = utc_now()
+            poller["last_task_result"] = result
+            self._touch()
+
+    def mark_result_reported(self, *, response_status: int) -> None:
+        with self._lock:
+            poller = self._status["poller"]
+            if not poller["enabled"]:
+                return
+            poller["last_result_posted_at"] = utc_now()
+            poller["last_result_response_status"] = response_status
+            poller["last_error"] = None
+            poller["consecutive_failures"] = 0
+            self._touch()
+
+    def mark_poll_failed(
+        self,
+        *,
+        error: str,
+        response_status: int | None = None,
+    ) -> None:
+        with self._lock:
+            poller = self._status["poller"]
+            if not poller["enabled"]:
+                return
+            poller["status"] = "error"
+            poller["last_result_response_status"] = response_status
+            poller["last_error"] = error
+            poller["consecutive_failures"] += 1
+            self._touch()
+
+    def mark_poller_stopped(self) -> None:
+        with self._lock:
+            poller = self._status["poller"]
+            if not poller["enabled"]:
+                return
+            poller["status"] = "stopped"
             self._touch()
 
     def apply_safe_command(self, command: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
