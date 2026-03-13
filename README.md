@@ -183,6 +183,7 @@ ffmpeg -list_devices true -f dshow -i dummy
 `ffmpeg -list_devices` 출력의 `(video)` 표시는 장치 타입 설명일 뿐 장치 이름 일부가 아니다. `Integrated Webcam (video)` 전체를 넣지 말고 장치 이름만 넣는다.
 
 ```powershell
+$env:RUN_MODE="local"
 $env:SOURCE_TYPE="webcam"
 $env:WEBCAM_BACKEND="dshow"
 $env:WEBCAM_DEVICE="Integrated Webcam"
