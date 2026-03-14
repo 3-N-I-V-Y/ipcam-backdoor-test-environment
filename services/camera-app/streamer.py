@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+from pathlib import Path
 import subprocess
 import threading
 import time
@@ -32,9 +33,11 @@ QUALITY_ENCODING_PROFILES = {
 @dataclass(slots=True)
 class StreamerConfig:
     source: CameraSource
+    camera_id: str
     rtsp_url: str
     rtsp_transport: str = "tcp"
     ffmpeg_binary: str = "ffmpeg"
+    overlay_fontfile: str | None = None
     restart_delay_seconds: float = 3.0
     publish_probe_seconds: float = 1.5
 
@@ -86,10 +89,20 @@ class StreamerSupervisor:
                 continue
 
             stream_settings = self._state.current_stream_settings()
+            camera_id = str(stream_settings["camera_id"])
             quality = str(stream_settings["quality"])
+            overlay_enabled = bool(stream_settings["overlay_enabled"])
             config_revision = int(stream_settings["config_revision"])
-            command = self._build_command(quality=quality)
-            self._logger.info("starting ffmpeg publisher with quality=%s", quality)
+            command = self._build_command(
+                camera_id=camera_id,
+                quality=quality,
+                overlay_enabled=overlay_enabled,
+            )
+            self._logger.info(
+                "starting ffmpeg publisher with quality=%s overlay_enabled=%s",
+                quality,
+                overlay_enabled,
+            )
             self._logger.debug("ffmpeg command: %s", " ".join(command))
 
             try:
@@ -104,7 +117,11 @@ class StreamerSupervisor:
             with self._process_lock:
                 self._process = process
 
-            self._state.mark_stream_starting(process.pid, quality=quality)
+            self._state.mark_stream_starting(
+                process.pid,
+                quality=quality,
+                overlay_enabled=overlay_enabled,
+            )
             restart_requested = self._wait_for_reconfigure(
                 process,
                 config_revision=config_revision,
@@ -116,7 +133,11 @@ class StreamerSupervisor:
                 break
 
             if not restart_requested and process.poll() is None:
-                self._state.mark_stream_publishing(process.pid, quality=quality)
+                self._state.mark_stream_publishing(
+                    process.pid,
+                    quality=quality,
+                    overlay_enabled=overlay_enabled,
+                )
                 restart_requested = self._wait_for_reconfigure(
                     process,
                     config_revision=config_revision,
@@ -124,8 +145,9 @@ class StreamerSupervisor:
                 )
 
             if restart_requested and process.poll() is None:
-                self._logger.info("stream configuration changed, restarting ffmpeg")
-                self._state.mark_stream_restarting(reason="applying updated quality profile")
+                reason = str(self._state.current_stream_settings()["restart_reason"] or "applying stream changes")
+                self._logger.info("stream configuration changed, restarting ffmpeg: %s", reason)
+                self._state.mark_stream_restarting(reason=reason)
                 self._terminate_process()
 
             exit_code = process.wait()
@@ -150,7 +172,13 @@ class StreamerSupervisor:
         if not self._stop_event.is_set():
             self._state.mark_stream_stopped(exit_code=None)
 
-    def _build_command(self, *, quality: str) -> list[str]:
+    def _build_command(
+        self,
+        *,
+        camera_id: str,
+        quality: str,
+        overlay_enabled: bool,
+    ) -> list[str]:
         return [
             self._config.ffmpeg_binary,
             "-nostdin",
@@ -158,6 +186,11 @@ class StreamerSupervisor:
             "-loglevel",
             "warning",
             *self._config.source.ffmpeg_input_args(),
+            *self._overlay_filter_args(
+                camera_id=camera_id,
+                quality=quality,
+                overlay_enabled=overlay_enabled,
+            ),
             *self._config.source.ffmpeg_codec_args(),
             *self._quality_codec_args(quality),
             "-rtsp_transport",
@@ -177,6 +210,54 @@ class StreamerSupervisor:
             "-bufsize",
             profile["bufsize"],
         ]
+
+    def _overlay_filter_args(
+        self,
+        *,
+        camera_id: str,
+        quality: str,
+        overlay_enabled: bool,
+    ) -> list[str]:
+        if not overlay_enabled:
+            return []
+
+        filter_parts = []
+        fontfile = self._normalized_fontfile()
+        if fontfile:
+            filter_parts.append(f"fontfile='{self._escape_drawtext_value(fontfile)}'")
+
+        overlay_text = f"LAB MODE | {camera_id} | quality={quality}"
+        filter_parts.extend(
+            [
+                f"text='{self._escape_drawtext_value(overlay_text)}'",
+                "x=20",
+                "y=20",
+                "fontsize=22",
+                "fontcolor=white",
+                "box=1",
+                "boxcolor=black@0.6",
+                "boxborderw=10",
+            ]
+        )
+        return ["-vf", "drawtext=" + ":".join(filter_parts)]
+
+    def _normalized_fontfile(self) -> str | None:
+        if not self._config.overlay_fontfile:
+            return None
+
+        font_path = Path(self._config.overlay_fontfile)
+        if not font_path.exists():
+            return None
+
+        return font_path.as_posix()
+
+    def _escape_drawtext_value(self, value: str) -> str:
+        escaped = value.replace("\\", "\\\\")
+        escaped = escaped.replace(":", r"\:")
+        escaped = escaped.replace("'", r"\'")
+        escaped = escaped.replace("%", r"\%")
+        escaped = escaped.replace(",", r"\,")
+        return escaped
 
     def _terminate_process(self) -> None:
         with self._process_lock:

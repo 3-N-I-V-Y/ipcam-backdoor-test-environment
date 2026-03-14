@@ -48,6 +48,7 @@ class CameraState:
                 "restart_count": 0,
                 "config_revision": 0,
                 "applied_quality": None,
+                "applied_overlay_enabled": False,
                 "last_start_at": None,
                 "last_exit_at": None,
                 "last_exit_code": None,
@@ -103,28 +104,46 @@ class CameraState:
     def current_stream_settings(self) -> dict[str, Any]:
         with self._lock:
             return {
+                "camera_id": self._status["camera_id"],
                 "quality": self._status["controls"]["quality"],
                 "overlay_enabled": self._status["controls"]["overlay_enabled"],
                 "config_revision": self._status["stream"]["config_revision"],
+                "restart_reason": self._status["stream"]["last_restart_reason"],
             }
 
-    def mark_stream_starting(self, pid: int | None = None, *, quality: str | None = None) -> None:
+    def mark_stream_starting(
+        self,
+        pid: int | None = None,
+        *,
+        quality: str | None = None,
+        overlay_enabled: bool | None = None,
+    ) -> None:
         with self._lock:
             stream = self._status["stream"]
             stream["status"] = "starting"
             stream["ffmpeg_pid"] = pid
             stream["applied_quality"] = quality
+            if overlay_enabled is not None:
+                stream["applied_overlay_enabled"] = overlay_enabled
             stream["last_start_at"] = utc_now()
             stream["last_error"] = None
             stream["last_restart_reason"] = None
             self._touch()
 
-    def mark_stream_publishing(self, pid: int | None = None, *, quality: str | None = None) -> None:
+    def mark_stream_publishing(
+        self,
+        pid: int | None = None,
+        *,
+        quality: str | None = None,
+        overlay_enabled: bool | None = None,
+    ) -> None:
         with self._lock:
             stream = self._status["stream"]
             stream["status"] = "publishing"
             stream["ffmpeg_pid"] = pid
             stream["applied_quality"] = quality
+            if overlay_enabled is not None:
+                stream["applied_overlay_enabled"] = overlay_enabled
             stream["last_error"] = None
             stream["last_restart_reason"] = None
             self._touch()
@@ -368,12 +387,20 @@ class CameraState:
                     enabled = not self._status["controls"]["overlay_enabled"]
                 if not isinstance(enabled, bool):
                     raise ValueError("enabled must be a boolean")
+                previous_enabled = self._status["controls"]["overlay_enabled"]
                 self._status["controls"]["overlay_enabled"] = enabled
+                restart_requested = enabled != previous_enabled
+                if restart_requested:
+                    stream = self._status["stream"]
+                    stream["config_revision"] += 1
+                    state_label = "enabled" if enabled else "disabled"
+                    stream["last_restart_reason"] = f"overlay {state_label}"
                 self._touch()
                 return {
                     "accepted": True,
                     "command": normalized_command,
                     "overlay_enabled": enabled,
+                    "restart_requested": restart_requested,
                 }
 
             if normalized_command == "record_marker":

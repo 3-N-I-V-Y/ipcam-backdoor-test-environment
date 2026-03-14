@@ -42,6 +42,7 @@ class AppConfig:
     webcam_framerate: int
     webcam_resolution: str
     webcam_input_format: str | None
+    overlay_fontfile: str | None
     rtsp_url: str
     rtsp_transport: str
     control_url: str
@@ -63,6 +64,7 @@ class AppConfig:
         webcam_backend = os.getenv("WEBCAM_BACKEND", default_webcam_backend(run_mode)).strip().lower()
         webcam_device = os.getenv("WEBCAM_DEVICE", default_webcam_device(webcam_backend)).strip()
         webcam_input_format = os.getenv("WEBCAM_INPUT_FORMAT", "").strip() or None
+        overlay_fontfile = os.getenv("OVERLAY_FONTFILE", default_overlay_fontfile(run_mode)).strip() or None
 
         return cls(
             run_mode=run_mode,
@@ -77,6 +79,7 @@ class AppConfig:
             webcam_framerate=int(os.getenv("WEBCAM_FRAMERATE", "30")),
             webcam_resolution=os.getenv("WEBCAM_RESOLUTION", "1280x720"),
             webcam_input_format=webcam_input_format,
+            overlay_fontfile=overlay_fontfile,
             rtsp_url=os.getenv("RTSP_URL", default_rtsp_url(run_mode)),
             rtsp_transport=parse_rtsp_transport(
                 os.getenv("RTSP_TRANSPORT", default_rtsp_transport(run_mode))
@@ -139,6 +142,28 @@ def default_rtsp_url(run_mode: str) -> str:
     return "rtsp://mediamtx:8554/cam1"
 
 
+def default_overlay_fontfile(run_mode: str) -> str:
+    candidates: list[Path] = []
+    if run_mode == "docker":
+        candidates.append(Path("/usr/share/fonts/TTF/DejaVuSans.ttf"))
+    elif platform.system().lower() == "windows":
+        candidates.append(Path("C:/Windows/Fonts/arial.ttf"))
+    else:
+        candidates.extend(
+            [
+                Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+                Path("/usr/share/fonts/TTF/DejaVuSans.ttf"),
+                Path("/usr/share/fonts/dejavu/DejaVuSans.ttf"),
+            ]
+        )
+
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+
+    return ""
+
+
 def parse_rtsp_transport(raw_value: str) -> str:
     normalized = raw_value.strip().lower() or "tcp"
     if normalized not in {"tcp", "udp"}:
@@ -197,9 +222,11 @@ def create_app() -> FastAPI:
     streamer = StreamerSupervisor(
         config=StreamerConfig(
             source=source,
+            camera_id=config.camera_id,
             rtsp_url=config.rtsp_url,
             rtsp_transport=config.rtsp_transport,
             ffmpeg_binary=config.ffmpeg_binary,
+            overlay_fontfile=config.overlay_fontfile,
             restart_delay_seconds=config.restart_delay_seconds,
             publish_probe_seconds=config.publish_probe_seconds,
         ),
