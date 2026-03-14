@@ -10,6 +10,25 @@ from source import CameraSource
 from state import CameraState
 
 
+QUALITY_ENCODING_PROFILES = {
+    "low": {
+        "video_bitrate": "800k",
+        "maxrate": "900k",
+        "bufsize": "1600k",
+    },
+    "medium": {
+        "video_bitrate": "1800k",
+        "maxrate": "2200k",
+        "bufsize": "3600k",
+    },
+    "high": {
+        "video_bitrate": "3500k",
+        "maxrate": "4200k",
+        "bufsize": "7000k",
+    },
+}
+
+
 @dataclass(slots=True)
 class StreamerConfig:
     source: CameraSource
@@ -66,8 +85,11 @@ class StreamerSupervisor:
                 self._wait_before_retry()
                 continue
 
-            command = self._build_command()
-            self._logger.info("starting ffmpeg publisher")
+            stream_settings = self._state.current_stream_settings()
+            quality = str(stream_settings["quality"])
+            config_revision = int(stream_settings["config_revision"])
+            command = self._build_command(quality=quality)
+            self._logger.info("starting ffmpeg publisher with quality=%s", quality)
             self._logger.debug("ffmpeg command: %s", " ".join(command))
 
             try:
@@ -82,15 +104,29 @@ class StreamerSupervisor:
             with self._process_lock:
                 self._process = process
 
-            self._state.mark_stream_starting(process.pid)
-            time.sleep(self._config.publish_probe_seconds)
+            self._state.mark_stream_starting(process.pid, quality=quality)
+            restart_requested = self._wait_for_reconfigure(
+                process,
+                config_revision=config_revision,
+                timeout_seconds=self._config.publish_probe_seconds,
+            )
 
             if self._stop_event.is_set():
                 self._terminate_process()
                 break
 
-            if process.poll() is None:
-                self._state.mark_stream_publishing(process.pid)
+            if not restart_requested and process.poll() is None:
+                self._state.mark_stream_publishing(process.pid, quality=quality)
+                restart_requested = self._wait_for_reconfigure(
+                    process,
+                    config_revision=config_revision,
+                    timeout_seconds=None,
+                )
+
+            if restart_requested and process.poll() is None:
+                self._logger.info("stream configuration changed, restarting ffmpeg")
+                self._state.mark_stream_restarting(reason="applying updated quality profile")
+                self._terminate_process()
 
             exit_code = process.wait()
             with self._process_lock:
@@ -103,6 +139,9 @@ class StreamerSupervisor:
                 )
                 break
 
+            if restart_requested:
+                continue
+
             error = f"ffmpeg exited with code {exit_code}"
             self._logger.warning(error)
             self._state.mark_stream_retrying(exit_code=exit_code, error=error)
@@ -111,7 +150,7 @@ class StreamerSupervisor:
         if not self._stop_event.is_set():
             self._state.mark_stream_stopped(exit_code=None)
 
-    def _build_command(self) -> list[str]:
+    def _build_command(self, *, quality: str) -> list[str]:
         return [
             self._config.ffmpeg_binary,
             "-nostdin",
@@ -120,11 +159,23 @@ class StreamerSupervisor:
             "warning",
             *self._config.source.ffmpeg_input_args(),
             *self._config.source.ffmpeg_codec_args(),
+            *self._quality_codec_args(quality),
             "-rtsp_transport",
             self._config.rtsp_transport,
             "-f",
             "rtsp",
             self._config.rtsp_url,
+        ]
+
+    def _quality_codec_args(self, quality: str) -> list[str]:
+        profile = QUALITY_ENCODING_PROFILES.get(quality, QUALITY_ENCODING_PROFILES["high"])
+        return [
+            "-b:v",
+            profile["video_bitrate"],
+            "-maxrate",
+            profile["maxrate"],
+            "-bufsize",
+            profile["bufsize"],
         ]
 
     def _terminate_process(self) -> None:
@@ -146,3 +197,26 @@ class StreamerSupervisor:
         deadline = time.monotonic() + self._config.restart_delay_seconds
         while not self._stop_event.is_set() and time.monotonic() < deadline:
             time.sleep(0.2)
+
+    def _wait_for_reconfigure(
+        self,
+        process: subprocess.Popen[bytes],
+        *,
+        config_revision: int,
+        timeout_seconds: float | None,
+    ) -> bool:
+        deadline = None
+        if timeout_seconds is not None:
+            deadline = time.monotonic() + timeout_seconds
+
+        while not self._stop_event.is_set() and process.poll() is None:
+            current_revision = int(self._state.current_stream_settings()["config_revision"])
+            if current_revision != config_revision:
+                return True
+
+            if deadline is not None and time.monotonic() >= deadline:
+                return False
+
+            time.sleep(0.2)
+
+        return False

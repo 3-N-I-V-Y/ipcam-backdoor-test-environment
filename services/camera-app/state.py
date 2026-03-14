@@ -46,10 +46,13 @@ class CameraState:
                 "target_url": rtsp_url,
                 "ffmpeg_pid": None,
                 "restart_count": 0,
+                "config_revision": 0,
+                "applied_quality": None,
                 "last_start_at": None,
                 "last_exit_at": None,
                 "last_exit_code": None,
                 "last_error": None,
+                "last_restart_reason": None,
             },
             "controls": {
                 "quality": "high",
@@ -97,21 +100,42 @@ class CameraState:
             )
             return snapshot
 
-    def mark_stream_starting(self, pid: int | None = None) -> None:
+    def current_stream_settings(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "quality": self._status["controls"]["quality"],
+                "overlay_enabled": self._status["controls"]["overlay_enabled"],
+                "config_revision": self._status["stream"]["config_revision"],
+            }
+
+    def mark_stream_starting(self, pid: int | None = None, *, quality: str | None = None) -> None:
         with self._lock:
             stream = self._status["stream"]
             stream["status"] = "starting"
             stream["ffmpeg_pid"] = pid
+            stream["applied_quality"] = quality
             stream["last_start_at"] = utc_now()
             stream["last_error"] = None
+            stream["last_restart_reason"] = None
             self._touch()
 
-    def mark_stream_publishing(self, pid: int | None = None) -> None:
+    def mark_stream_publishing(self, pid: int | None = None, *, quality: str | None = None) -> None:
         with self._lock:
             stream = self._status["stream"]
             stream["status"] = "publishing"
             stream["ffmpeg_pid"] = pid
+            stream["applied_quality"] = quality
             stream["last_error"] = None
+            stream["last_restart_reason"] = None
+            self._touch()
+
+    def mark_stream_restarting(self, *, reason: str) -> None:
+        with self._lock:
+            stream = self._status["stream"]
+            stream["status"] = "restarting"
+            stream["ffmpeg_pid"] = None
+            stream["last_error"] = None
+            stream["last_restart_reason"] = reason
             self._touch()
 
     def mark_stream_retrying(self, *, exit_code: int | None, error: str) -> None:
@@ -323,12 +347,19 @@ class CameraState:
                 quality = params.get("quality")
                 if quality not in VALID_QUALITY_LEVELS:
                     raise ValueError(f"quality must be one of {sorted(VALID_QUALITY_LEVELS)}")
+                previous_quality = self._status["controls"]["quality"]
                 self._status["controls"]["quality"] = quality
+                restart_requested = quality != previous_quality
+                if restart_requested:
+                    stream = self._status["stream"]
+                    stream["config_revision"] += 1
+                    stream["last_restart_reason"] = f"quality changed to {quality}"
                 self._touch()
                 return {
                     "accepted": True,
                     "command": normalized_command,
                     "quality": quality,
+                    "restart_requested": restart_requested,
                 }
 
             if normalized_command == "toggle_overlay":

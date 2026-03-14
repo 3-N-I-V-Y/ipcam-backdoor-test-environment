@@ -26,8 +26,13 @@ def normalize_dshow_device_name(raw_device: str) -> str:
 
 
 class CameraSource(Protocol):
-    kind: str
-    uri: str
+    @property
+    def kind(self) -> str:
+        ...
+
+    @property
+    def uri(self) -> str:
+        ...
 
     def validate(self) -> None:
         ...
@@ -68,7 +73,17 @@ class FileSource:
         ]
 
     def ffmpeg_codec_args(self) -> list[str]:
-        return ["-c", "copy"]
+        return [
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-tune",
+            "zerolatency",
+            "-pix_fmt",
+            "yuv420p",
+        ]
 
     def state_fields(self) -> dict[str, Any]:
         return {
