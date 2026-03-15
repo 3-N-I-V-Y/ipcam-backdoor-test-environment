@@ -1,61 +1,63 @@
-{% extends "layout.html" %}
-
-{% block content %}
+{% extends "layout.html" %} {% block content %}
 <section class="section-heading">
   <div>
-    <span class="eyebrow">Camera Detail</span>
+    <span class="eyebrow">카메라 상세 정보</span>
     <h2>{{ camera.display_name }}</h2>
     <p>{{ camera.location }} - {{ camera.vendor }} {{ camera.model }}</p>
   </div>
   <div class="status-summary">
-    <span class="badge {{ camera.stream_status }}">{{ camera.stream_status }}</span>
-    <span class="chip">Recorder: {{ recorder_state.get("status", "idle") }}</span>
+    <span class="badge {{ camera.stream_status }}"
+      >{{ camera.stream_status }}</span
+    >
+    <span class="chip"
+      >Recorder: {{ recorder_state.get("status", "idle") }}</span
+    >
   </div>
 </section>
 
 <section class="panel-grid">
   <article class="panel wide">
     <div class="panel-heading">
-      <h3>Current Runtime Summary</h3>
+      <h3>현재 가동 현황</h3>
     </div>
     <div class="runtime-grid">
       <div class="runtime-card">
-        <span class="eyebrow">Stream</span>
+        <span class="eyebrow">송출</span>
         <strong>{{ camera.runtime.stream_status }}</strong>
         <p>revision={{ camera.runtime.config_revision }}</p>
       </div>
       <div class="runtime-card">
-        <span class="eyebrow">Quality</span>
+        <span class="eyebrow">품질</span>
         <strong>{{ camera.runtime.quality }}</strong>
         <p>applied={{ camera.runtime.applied_quality or "unknown" }}</p>
       </div>
       <div class="runtime-card">
-        <span class="eyebrow">Overlay</span>
+        <span class="eyebrow">오버레이</span>
         <strong>{{ camera.runtime.overlay_label }}</strong>
         <p>applied={{ camera.runtime.applied_overlay_enabled }}</p>
       </div>
       <div class="runtime-card">
-        <span class="eyebrow">Source</span>
+        <span class="eyebrow">입력소스</span>
         <strong>{{ camera.runtime.source_kind }}</strong>
         <p>{{ camera.runtime.source_uri }}</p>
       </div>
       <div class="runtime-card">
-        <span class="eyebrow">Beacon</span>
+        <span class="eyebrow">상태</span>
         <strong>{{ camera.runtime.beacon_status }}</strong>
         <p>enabled={{ camera.runtime.beacon_enabled }}</p>
       </div>
       <div class="runtime-card">
-        <span class="eyebrow">Poller</span>
+        <span class="eyebrow">작업</span>
         <strong>{{ camera.runtime.poller_status }}</strong>
         <p>enabled={{ camera.runtime.poller_enabled }}</p>
       </div>
       <div class="runtime-card">
-        <span class="eyebrow">Uptime</span>
-        <strong>{{ camera.runtime.uptime_seconds or "unknown" }}</strong>
+        <span class="eyebrow">가동시간</span>
+        <strong>{{ camera.runtime.uptime_label }}</strong>
         <p>lab_mode={{ camera.runtime.lab_mode }}</p>
       </div>
       <div class="runtime-card">
-        <span class="eyebrow">Markers</span>
+        <span class="eyebrow">이벤트 표시</span>
         <strong>{{ camera.runtime.markers_count }}</strong>
         <p>last_error={{ camera.runtime.last_error or "none" }}</p>
       </div>
@@ -64,7 +66,7 @@
 
   <article class="panel">
     <div class="panel-heading">
-      <h3>Network endpoints</h3>
+      <h3>네트워크 엔드포인트</h3>
     </div>
     <dl class="detail-list">
       <div>
@@ -98,25 +100,50 @@
     <div class="panel-heading">
       <h3>Configuration</h3>
     </div>
-    <form method="post" action="/cameras/{{ camera.camera_id }}/settings" class="stack-form">
+    <form
+      method="post"
+      action="/cameras/{{ camera.camera_id }}/settings"
+      class="stack-form"
+    >
       <label>
         <span>Display Name</span>
-        <input type="text" name="display_name" value="{{ camera.display_name }}" required>
+        <input
+          type="text"
+          name="display_name"
+          value="{{ camera.display_name }}"
+          required
+        />
       </label>
       <label>
         <span>Location</span>
-        <input type="text" name="location" value="{{ camera.location }}" required>
+        <input
+          type="text"
+          name="location"
+          value="{{ camera.location }}"
+          required
+        />
       </label>
       <label>
         <span>Recording Mode</span>
         <select name="recording_mode">
-          <option value="continuous" {% if camera.recording_mode == 'continuous' %}selected{% endif %}>Continuous</option>
-          <option value="disabled" {% if camera.recording_mode == 'disabled' %}selected{% endif %}>Disabled</option>
+          <option value="continuous" {% if camera.recording_mode == "continuous" %}selected{% endif %}>
+            Continuous
+          </option>
+          <option value="disabled" {% if camera.recording_mode == "disabled" %}selected{% endif %}>
+            Disabled
+          </option>
         </select>
       </label>
       <label>
         <span>Retention (days)</span>
-        <input type="number" name="retention_days" min="1" max="90" value="{{ camera.retention_days }}" required>
+        <input
+          type="number"
+          name="retention_days"
+          min="1"
+          max="90"
+          value="{{ camera.retention_days }}"
+          required
+        />
       </label>
       <button class="primary-button" type="submit">Save camera settings</button>
     </form>
@@ -124,14 +151,18 @@
 
   <article class="panel">
     <div class="panel-heading">
-      <h3>Normal Control Tasks</h3>
+      <h3>일반 작업 제어</h3>
     </div>
     {% if control_feedback %}
     <p class="info-banner">Control action response: {{ control_feedback }}</p>
     {% endif %}
-    <form method="post" action="/cameras/{{ camera.camera_id }}/control/task" class="stack-form">
+    <form
+      method="post"
+      action="/cameras/{{ camera.camera_id }}/control/task"
+      class="stack-form"
+    >
       <label>
-        <span>Command</span>
+        <span>명령</span>
         <select name="command">
           <option value="get_status">Get Status</option>
           <option value="set_quality">Set Quality</option>
@@ -140,7 +171,7 @@
         </select>
       </label>
       <label>
-        <span>Quality</span>
+        <span>품질</span>
         <select name="quality">
           <option value="low">Low</option>
           <option value="medium">Medium</option>
@@ -148,23 +179,23 @@
         </select>
       </label>
       <label>
-        <span>Overlay</span>
+        <span>오버레이</span>
         <select name="overlay_enabled">
           <option value="true">Enable</option>
           <option value="false" selected>Disable</option>
         </select>
       </label>
       <label>
-        <span>Marker Note</span>
-        <input type="text" name="marker_note" placeholder="operator note">
+        <span>이벤트 메모</span>
+        <input type="text" name="marker_note" placeholder="operator note" />
       </label>
-      <button class="primary-button" type="submit">Queue task on normal control-server</button>
+      <button class="primary-button" type="submit">제어 명령 등록</button>
     </form>
   </article>
 
   <article class="panel wide">
     <div class="panel-heading">
-      <h3>Latest status payload</h3>
+      <h3>최신 상태 페이로드</h3>
     </div>
     {% if status_payload %}
     <pre class="json-block">{{ status_payload | prettyjson }}</pre>
@@ -175,75 +206,77 @@
 
   <article class="panel wide">
     <div class="panel-heading">
-      <h3>Normal Control State</h3>
+      <h3>제어 상태</h3>
     </div>
     {% if control_state.healthy %}
     <div class="panel-grid compact-grid">
       <article class="subpanel">
         <h4>Recent Beacons</h4>
         <div class="list">
-          {% if control_state.recent_beacons %}
-            {% for beacon in control_state.recent_beacons %}
-            <div class="list-row">
-              <div>
-                <strong>{{ beacon.stream_state }}</strong>
-                <p>{{ beacon.source_kind }} / {{ beacon.lab_mode }}</p>
-              </div>
-              <div class="status-stack">
-                <span>{{ beacon.camera_id }}</span>
-                <small>{{ beacon.received_at }}</small>
-              </div>
+          {% if control_state.recent_beacons %} {% for beacon in
+          control_state.recent_beacons %}
+          <div class="list-row">
+            <div>
+              <strong>{{ beacon.stream_state }}</strong>
+              <p>{{ beacon.source_kind }} / {{ beacon.lab_mode }}</p>
             </div>
-            {% endfor %}
-          {% else %}
-            <p class="empty-state">No beacons received yet.</p>
+            <div class="status-stack">
+              <span>{{ beacon.camera_id }}</span>
+              <small>{{ beacon.received_at }}</small>
+            </div>
+          </div>
+          {% endfor %} {% else %}
+          <p class="empty-state">No beacons received yet.</p>
           {% endif %}
         </div>
       </article>
 
       <article class="subpanel">
-        <h4>Pending Tasks</h4>
+        <h4>대기중인 작업</h4>
         <div class="list">
-          {% if control_state.pending_tasks %}
-            {% for task in control_state.pending_tasks %}
-            <div class="list-row">
-              <div>
-                <strong>{{ task.command }}</strong>
-                <p>{{ task.params }}</p>
-              </div>
-              <div class="status-stack">
-                <span>{{ task.id }}</span>
-                <small>{{ task.created_at }}</small>
-              </div>
+          {% if control_state.pending_tasks %} {% for task in
+          control_state.pending_tasks %}
+          <div class="list-row">
+            <div>
+              <strong>{{ task.command }}</strong>
+              <p>{{ task.params }}</p>
             </div>
-            {% endfor %}
-          {% else %}
-            <p class="empty-state">No pending tasks.</p>
+            <div class="status-stack">
+              <span>{{ task.id }}</span>
+              <small>{{ task.created_at }}</small>
+            </div>
+          </div>
+          {% endfor %} {% else %}
+          <p class="empty-state">No pending tasks.</p>
           {% endif %}
         </div>
       </article>
     </div>
 
     <div class="list top-gap">
-      {% if control_state.recent_results %}
-        {% for result in control_state.recent_results %}
-        <div class="list-row">
-          <div>
-            <strong>{{ result.command }}</strong>
-            <p>{{ "success" if result.success else "failed" }}{% if result.error %}: {{ result.error }}{% endif %}</p>
-          </div>
-          <div class="status-stack">
-            <span>{{ result.task_id }}</span>
-            <small>{{ result.received_at }}</small>
-          </div>
+      {% if control_state.recent_results %} {% for result in
+      control_state.recent_results %}
+      <div class="list-row">
+        <div>
+          <strong>{{ result.command }}</strong>
+          <p>
+            {{ "success" if result.success else "failed" }}{% if result.error
+            %}: {{ result.error }}{% endif %}
+          </p>
         </div>
-        {% endfor %}
-      {% else %}
-        <p class="empty-state">No task results have been reported yet.</p>
+        <div class="status-stack">
+          <span>{{ result.task_id }}</span>
+          <small>{{ result.received_at }}</small>
+        </div>
+      </div>
+      {% endfor %} {% else %}
+      <p class="empty-state">No task results have been reported yet.</p>
       {% endif %}
     </div>
     {% else %}
-    <p class="empty-state">Control server unavailable: {{ control_state.error }}</p>
+    <p class="empty-state">
+      Control server unavailable: {{ control_state.error }}
+    </p>
     {% endif %}
   </article>
 </section>

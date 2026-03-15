@@ -1,35 +1,39 @@
-{% extends "layout.html" %}
-
-{% block content %}
+{% extends "layout.html" %} {% block content %}
 <section class="section-heading">
   <div>
-    <span class="eyebrow">Control Plane</span>
+    <span class="eyebrow">채널 상태 현황</span>
     <h2>Normal management channel</h2>
-    <p>This view shows the allowed task and beacon flow between the camera estate and the normal control-server. Later NDR logic should treat this traffic as expected baseline.</p>
+    <p>
+      카메라 인프라와 정상 관제 서버 간의 승인된 작업 및 제어 비컨 통신
+      내역입니다. 추후 적용될 NDR 로직에서는 이 통신 기록이 정상 트래픽
+      기준(Baseline)으로 활용됩니다.
+    </p>
   </div>
 </section>
 
 <section class="panel-grid">
   <article class="panel">
     <div class="panel-heading">
-      <h3>Control health</h3>
+      <h3>상태 현황</h3>
     </div>
     {% if control_overview.healthy %}
     <div class="list">
       <div class="list-row">
         <div>
           <strong>Recent beacons</strong>
-          <p>Heartbeats accepted by the normal control-server.</p>
+          <p>카메라 생존 신호 및 상태 동기화 활동 모니터링</p>
         </div>
         <div class="status-stack">
           <span>{{ control_overview.recent_beacons_count }}</span>
-          <small>{{ control_overview.active_camera_count }} active cameras</small>
+          <small
+            >{{ control_overview.active_camera_count }} active cameras</small
+          >
         </div>
       </div>
       <div class="list-row">
         <div>
-          <strong>Pending tasks</strong>
-          <p>Queued safe commands waiting for pollers.</p>
+          <strong>대기중인 작업</strong>
+          <p>카메라 수신 대기 작업 목록</p>
         </div>
         <div class="status-stack">
           <span>{{ control_overview.pending_tasks_count }}</span>
@@ -38,13 +42,15 @@
       </div>
     </div>
     {% else %}
-    <p class="empty-state">Control server unavailable: {{ control_overview.error }}</p>
+    <p class="empty-state">
+      Control server unavailable: {{ control_overview.error }}
+    </p>
     {% endif %}
   </article>
 
   <article class="panel">
     <div class="panel-heading">
-      <h3>Managed cameras</h3>
+      <h3>연동된 카메라</h3>
     </div>
     <div class="list">
       {% for camera in cameras %}
@@ -54,8 +60,12 @@
           <p>{{ camera.camera_id }}</p>
         </div>
         <div class="status-stack">
-          <span class="badge {{ camera.stream_status }}">{{ camera.stream_status }}</span>
-          <small><a href="/cameras/{{ camera.camera_id }}">open detail</a></small>
+          <span class="badge {{ camera.stream_status }}"
+            >{{ camera.stream_status }}</span
+          >
+          <small
+            ><a href="/cameras/{{ camera.camera_id }}">상세페이지</a></small
+          >
         </div>
       </div>
       {% endfor %}
@@ -67,45 +77,46 @@
       <h3>Recent beacons</h3>
     </div>
     <div class="list">
-      {% if control_overview.recent_beacons %}
-        {% for beacon in control_overview.recent_beacons %}
-        <div class="list-row">
-          <div>
-            <strong>{{ beacon.camera_id }}</strong>
-            <p>{{ beacon.stream_state }} / {{ beacon.source_kind }}</p>
-          </div>
-          <div class="status-stack">
-            <span>{{ beacon.lab_mode }}</span>
-            <small>{{ beacon.received_at }}</small>
-          </div>
+      {% if control_overview.recent_beacons %} {% for beacon in
+      control_overview.recent_beacons %}
+      <div class="list-row">
+        <div>
+          <strong>{{ beacon.camera_id }}</strong>
+          <p>{{ beacon.stream_state }} / {{ beacon.source_kind }}</p>
         </div>
-        {% endfor %}
-      {% else %}
-        <p class="empty-state">No beacons received yet.</p>
+        <div class="status-stack">
+          <span>{{ beacon.lab_mode }}</span>
+          <small>{{ beacon.received_at }}</small>
+        </div>
+      </div>
+      {% endfor %} {% else %}
+      <p class="empty-state">No beacons received yet.</p>
       {% endif %}
     </div>
   </article>
 
   <article class="panel wide">
     <div class="panel-heading">
-      <h3>Recent results</h3>
+      <h3>작업 결과</h3>
     </div>
     <div class="list">
-      {% if control_overview.recent_results %}
-        {% for result in control_overview.recent_results %}
-        <div class="list-row">
-          <div>
-            <strong>{{ result.camera_id }} - {{ result.command }}</strong>
-            <p>{{ "success" if result.success else "failed" }}{% if result.error %}: {{ result.error }}{% endif %}</p>
-          </div>
-          <div class="status-stack">
-            <span>{{ result.task_id }}</span>
-            <small>{{ result.received_at }}</small>
-          </div>
+      {% if control_overview.recent_results %} {% for result in
+      control_overview.recent_results %}
+      <div class="list-row">
+        <div>
+          <strong>{{ result.camera_id }} - {{ result.command }}</strong>
+          <p>
+            {{ "success" if result.success else "failed" }}{% if result.error
+            %}: {{ result.error }}{% endif %}
+          </p>
         </div>
-        {% endfor %}
-      {% else %}
-        <p class="empty-state">No results reported yet.</p>
+        <div class="status-stack">
+          <span>{{ result.task_id }}</span>
+          <small>{{ result.received_at }}</small>
+        </div>
+      </div>
+      {% endfor %} {% else %}
+      <p class="empty-state">No results reported yet.</p>
       {% endif %}
     </div>
   </article>
