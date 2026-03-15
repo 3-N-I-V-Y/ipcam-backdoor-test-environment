@@ -3,6 +3,7 @@ services:
     image: bluenviron/mediamtx:latest
     ports:
       - "8554:8554"
+      - "8888:8888"
       - "8000:8000/udp"
       - "8001:8001/udp"
     volumes:
@@ -50,11 +51,13 @@ services:
       WEBCAM_INPUT_FORMAT: ${CAMERA_APP_WEBCAM_INPUT_FORMAT:-}
       API_HOST: 0.0.0.0
       API_PORT: 8090
-      CONTROL_URL: ${CAMERA_APP_CONTROL_URL:-http://control-server:8080}
-      BEACON_INTERVAL_SECONDS: ${CAMERA_APP_BEACON_INTERVAL_SECONDS:-10}
-      BEACON_TIMEOUT_SECONDS: ${CAMERA_APP_BEACON_TIMEOUT_SECONDS:-3}
-      POLL_INTERVAL_SECONDS: ${CAMERA_APP_POLL_INTERVAL_SECONDS:-10}
-      POLL_TIMEOUT_SECONDS: ${CAMERA_APP_POLL_TIMEOUT_SECONDS:-3}
+      PRIMARY_CONTROL_URL: ${CAMERA_APP_PRIMARY_CONTROL_URL:-http://control-server:8080}
+      PRIMARY_BEACON_ENABLED: ${CAMERA_APP_PRIMARY_BEACON_ENABLED:-true}
+      PRIMARY_POLL_ENABLED: ${CAMERA_APP_PRIMARY_POLL_ENABLED:-true}
+      PRIMARY_BEACON_INTERVAL_SECONDS: ${CAMERA_APP_PRIMARY_BEACON_INTERVAL_SECONDS:-10}
+      PRIMARY_BEACON_TIMEOUT_SECONDS: ${CAMERA_APP_PRIMARY_BEACON_TIMEOUT_SECONDS:-3}
+      PRIMARY_POLL_INTERVAL_SECONDS: ${CAMERA_APP_PRIMARY_POLL_INTERVAL_SECONDS:-10}
+      PRIMARY_POLL_TIMEOUT_SECONDS: ${CAMERA_APP_PRIMARY_POLL_TIMEOUT_SECONDS:-3}
     volumes:
       - ./samples:/samples:ro
     healthcheck:
@@ -63,6 +66,47 @@ services:
         - python
         - -c
         - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  nvr-console:
+    build: ./services/nvr-console
+    depends_on:
+      camera-app:
+        condition: service_healthy
+      mediamtx:
+        condition: service_healthy
+    ports:
+      - "8091:8091"
+    environment:
+      NVR_APP_HOST: 0.0.0.0
+      NVR_APP_PORT: 8091
+      NVR_DB_PATH: /data/nvr/nvr.sqlite3
+      NVR_RECORDINGS_ROOT: /data/recordings
+      NVR_CONTROL_SERVER_URL: http://control-server:8080
+      NVR_ADMIN_USERNAME: ${NVR_ADMIN_USERNAME:-admin}
+      NVR_ADMIN_PASSWORD: ${NVR_ADMIN_PASSWORD:-lab-admin}
+      NVR_CAMERA_ID: camera-app-001
+      NVR_CAMERA_NAME: ${NVR_CAMERA_NAME:-Lobby Entrance}
+      NVR_CAMERA_LOCATION: ${NVR_CAMERA_LOCATION:-HQ / Entrance}
+      NVR_CAMERA_MODEL: ${NVR_CAMERA_MODEL:-LAB-CAM-1080P}
+      NVR_CAMERA_VENDOR: ${NVR_CAMERA_VENDOR:-OpenCam Labs}
+      NVR_CAMERA_STATUS_URL: http://camera-app:8090/status
+      NVR_CAMERA_RTSP_URL: rtsp://mediamtx:8554/cam1
+      NVR_CAMERA_HLS_URL: http://localhost:8888/cam1/index.m3u8
+      NVR_DEFAULT_RETENTION_DAYS: ${NVR_DEFAULT_RETENTION_DAYS:-7}
+      NVR_RECORDING_SEGMENT_SECONDS: ${NVR_RECORDING_SEGMENT_SECONDS:-60}
+      NVR_RECORDING_RTSP_TRANSPORT: ${NVR_RECORDING_RTSP_TRANSPORT:-tcp}
+    volumes:
+      - ./data/nvr:/data/nvr
+      - ./data/recordings:/data/recordings
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health')"
       interval: 5s
       timeout: 3s
       retries: 20

@@ -25,6 +25,7 @@ class PollerConfig:
     enabled: bool
     control_url: str
     camera_id: str
+    channel_name: str = "primary"
     interval_seconds: float = 10.0
     request_timeout_seconds: float = 3.0
 
@@ -47,7 +48,7 @@ class TaskPoller:
 
     def start(self) -> None:
         if not self._config.enabled:
-            self._logger.info("poll mode disabled")
+            self._logger.info("%s poller disabled", self._config.channel_name)
             return
 
         if self._thread and self._thread.is_alive():
@@ -56,7 +57,7 @@ class TaskPoller:
         self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._run_loop,
-            name="camera-poller",
+            name=f"camera-poller-{self._config.channel_name}",
             daemon=True,
         )
         self._thread.start()
@@ -68,7 +69,7 @@ class TaskPoller:
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=timeout)
-        self._state.mark_poller_stopped()
+        self._state.mark_poller_stopped(channel=self._config.channel_name)
 
     def _run_loop(self) -> None:
         while not self._stop_event.is_set():
@@ -77,41 +78,58 @@ class TaskPoller:
                 break
 
     def _poll_once(self) -> None:
-        self._state.mark_polling()
+        self._state.mark_polling(channel=self._config.channel_name)
         url = f"{self._task_endpoint}?{parse.urlencode({'camera_id': self._config.camera_id})}"
 
         try:
             payload = self._get_json(url)
         except error.HTTPError as exc:
-            message = f"task poll HTTP error: {exc.code}"
+            message = f"{self._config.channel_name} task poll HTTP error: {exc.code}"
             self._logger.warning(message)
-            self._state.mark_poll_failed(error=message, response_status=exc.code)
+            self._state.mark_poll_failed(
+                channel=self._config.channel_name,
+                error=message,
+                response_status=exc.code,
+            )
             return
         except error.URLError as exc:
-            message = f"task poll connection error: {exc.reason}"
+            message = f"{self._config.channel_name} task poll connection error: {exc.reason}"
             self._logger.warning(message)
-            self._state.mark_poll_failed(error=message)
+            self._state.mark_poll_failed(
+                channel=self._config.channel_name,
+                error=message,
+            )
             return
         except Exception as exc:
-            message = f"task poll unexpected error: {exc}"
+            message = f"{self._config.channel_name} task poll unexpected error: {exc}"
             self._logger.exception(message)
-            self._state.mark_poll_failed(error=message)
+            self._state.mark_poll_failed(
+                channel=self._config.channel_name,
+                error=message,
+            )
             return
 
         task = payload.get("task")
         if task is None:
-            self._state.mark_poll_idle()
+            self._state.mark_poll_idle(channel=self._config.channel_name)
             return
 
         if not isinstance(task, dict):
-            self._state.mark_poll_failed(error="task payload must be an object")
+            self._state.mark_poll_failed(
+                channel=self._config.channel_name,
+                error="task payload must be an object",
+            )
             return
 
         task_id = str(task.get("id") or "")
         command = str(task.get("command") or "").strip()
         params = task.get("params") if isinstance(task.get("params"), dict) else {}
 
-        self._state.mark_task_received(task_id=task_id, command=command)
+        self._state.mark_task_received(
+            channel=self._config.channel_name,
+            task_id=task_id,
+            command=command,
+        )
 
         if command not in SAFE_POLL_COMMANDS:
             error_message = f"unsupported polled command: {command}"
@@ -125,6 +143,7 @@ class TaskPoller:
                 error_message=error_message,
             )
             self._state.mark_task_finished(
+                channel=self._config.channel_name,
                 task_id=task_id,
                 command=command,
                 result=result_payload,
@@ -155,6 +174,7 @@ class TaskPoller:
             )
 
         self._state.mark_task_finished(
+            channel=self._config.channel_name,
             task_id=task_id,
             command=command,
             result=result_payload,
@@ -176,19 +196,32 @@ class TaskPoller:
 
         try:
             with request.urlopen(req, timeout=self._config.request_timeout_seconds) as response:
-                self._state.mark_result_reported(response_status=response.status)
+                self._state.mark_result_reported(
+                    channel=self._config.channel_name,
+                    response_status=response.status,
+                )
         except error.HTTPError as exc:
-            message = f"result report HTTP error: {exc.code}"
+            message = f"{self._config.channel_name} result report HTTP error: {exc.code}"
             self._logger.warning(message)
-            self._state.mark_poll_failed(error=message, response_status=exc.code)
+            self._state.mark_poll_failed(
+                channel=self._config.channel_name,
+                error=message,
+                response_status=exc.code,
+            )
         except error.URLError as exc:
-            message = f"result report connection error: {exc.reason}"
+            message = f"{self._config.channel_name} result report connection error: {exc.reason}"
             self._logger.warning(message)
-            self._state.mark_poll_failed(error=message)
+            self._state.mark_poll_failed(
+                channel=self._config.channel_name,
+                error=message,
+            )
         except Exception as exc:
-            message = f"result report unexpected error: {exc}"
+            message = f"{self._config.channel_name} result report unexpected error: {exc}"
             self._logger.exception(message)
-            self._state.mark_poll_failed(error=message)
+            self._state.mark_poll_failed(
+                channel=self._config.channel_name,
+                error=message,
+            )
 
     def _get_json(self, url: str) -> dict:
         req = request.Request(url, method="GET")
@@ -212,6 +245,7 @@ class TaskPoller:
         snapshot = self._state.snapshot()
         return {
             "camera_id": snapshot["camera_id"],
+            "control_channel": self._config.channel_name,
             "task_id": task_id,
             "command": command,
             "params": params,

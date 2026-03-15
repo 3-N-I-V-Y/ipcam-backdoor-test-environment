@@ -25,7 +25,15 @@ logging.basicConfig(
 logger = logging.getLogger("camera-app")
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+def resolve_repo_root() -> Path:
+    current_file = Path(__file__).resolve()
+    for candidate in (current_file.parent, *current_file.parents):
+        if (candidate / "samples" / "demo.mp4").exists():
+            return candidate
+    return current_file.parent
+
+
+REPO_ROOT = resolve_repo_root()
 
 
 @dataclass(slots=True)
@@ -33,8 +41,6 @@ class AppConfig:
     run_mode: str
     camera_id: str
     lab_mode: str
-    beacon_enabled: bool
-    poll_enabled: bool
     source_type: str
     input_source: str
     webcam_backend: str
@@ -45,21 +51,23 @@ class AppConfig:
     overlay_fontfile: str | None
     rtsp_url: str
     rtsp_transport: str
-    control_url: str
+    primary_control_url: str
+    primary_beacon_enabled: bool
+    primary_poll_enabled: bool
     api_host: str
     api_port: int
     ffmpeg_binary: str
     restart_delay_seconds: float
     publish_probe_seconds: float
-    beacon_interval_seconds: float
-    beacon_timeout_seconds: float
-    poll_interval_seconds: float
-    poll_timeout_seconds: float
+    primary_beacon_interval_seconds: float
+    primary_beacon_timeout_seconds: float
+    primary_poll_interval_seconds: float
+    primary_poll_timeout_seconds: float
 
     @classmethod
     def from_env(cls) -> "AppConfig":
         run_mode = parse_run_mode(os.getenv("RUN_MODE", "docker"))
-        lab_mode, features = parse_lab_mode(os.getenv("LAB_MODE", "none"))
+        lab_mode = normalize_lab_mode(os.getenv("LAB_MODE", "none"))
         source_type = os.getenv("SOURCE_TYPE", "file").strip().lower()
         webcam_backend = os.getenv("WEBCAM_BACKEND", default_webcam_backend(run_mode)).strip().lower()
         webcam_device = os.getenv("WEBCAM_DEVICE", default_webcam_device(webcam_backend)).strip()
@@ -70,8 +78,6 @@ class AppConfig:
             run_mode=run_mode,
             camera_id=os.getenv("CAMERA_ID", "camera-app-001"),
             lab_mode=lab_mode,
-            beacon_enabled="beacon" in features,
-            poll_enabled="poll" in features,
             source_type=source_type,
             input_source=os.getenv("INPUT_SOURCE", default_input_source(run_mode)),
             webcam_backend=webcam_backend,
@@ -84,16 +90,41 @@ class AppConfig:
             rtsp_transport=parse_rtsp_transport(
                 os.getenv("RTSP_TRANSPORT", default_rtsp_transport(run_mode))
             ),
-            control_url=os.getenv("CONTROL_URL", default_control_url(run_mode)),
+            primary_control_url=os.getenv(
+                "PRIMARY_CONTROL_URL",
+                os.getenv("CONTROL_URL", default_control_url(run_mode)),
+            ),
+            primary_beacon_enabled=parse_env_bool("PRIMARY_BEACON_ENABLED", default=True),
+            primary_poll_enabled=parse_env_bool("PRIMARY_POLL_ENABLED", default=True),
             api_host=os.getenv("API_HOST", default_api_host(run_mode)),
             api_port=int(os.getenv("API_PORT", "8090")),
             ffmpeg_binary=os.getenv("FFMPEG_BIN", "ffmpeg"),
             restart_delay_seconds=float(os.getenv("RESTART_DELAY_SECONDS", "3")),
             publish_probe_seconds=float(os.getenv("PUBLISH_PROBE_SECONDS", "1.5")),
-            beacon_interval_seconds=float(os.getenv("BEACON_INTERVAL_SECONDS", "10")),
-            beacon_timeout_seconds=float(os.getenv("BEACON_TIMEOUT_SECONDS", "3")),
-            poll_interval_seconds=float(os.getenv("POLL_INTERVAL_SECONDS", "10")),
-            poll_timeout_seconds=float(os.getenv("POLL_TIMEOUT_SECONDS", "3")),
+            primary_beacon_interval_seconds=float(
+                os.getenv(
+                    "PRIMARY_BEACON_INTERVAL_SECONDS",
+                    os.getenv("BEACON_INTERVAL_SECONDS", "10"),
+                )
+            ),
+            primary_beacon_timeout_seconds=float(
+                os.getenv(
+                    "PRIMARY_BEACON_TIMEOUT_SECONDS",
+                    os.getenv("BEACON_TIMEOUT_SECONDS", "3"),
+                )
+            ),
+            primary_poll_interval_seconds=float(
+                os.getenv(
+                    "PRIMARY_POLL_INTERVAL_SECONDS",
+                    os.getenv("POLL_INTERVAL_SECONDS", "10"),
+                )
+            ),
+            primary_poll_timeout_seconds=float(
+                os.getenv(
+                    "PRIMARY_POLL_TIMEOUT_SECONDS",
+                    os.getenv("POLL_TIMEOUT_SECONDS", "3"),
+                )
+            ),
         )
 
 
@@ -104,18 +135,26 @@ def parse_run_mode(raw_value: str) -> str:
     return normalized
 
 
-def parse_lab_mode(raw_value: str) -> tuple[str, set[str]]:
+def normalize_lab_mode(raw_value: str) -> str:
     normalized = raw_value.strip().lower()
     if not normalized or normalized == "none":
-        return "none", set()
+        return "none"
 
-    tokens = {token.strip() for token in normalized.split(",") if token.strip()}
-    allowed = {"beacon", "poll"}
-    invalid = sorted(tokens - allowed)
-    if invalid:
-        raise ValueError("LAB_MODE must contain only: none, beacon, poll")
+    tokens = sorted({token.strip() for token in normalized.split(",") if token.strip()})
+    return ",".join(tokens) if tokens else "none"
 
-    return ",".join(sorted(tokens)), tokens
+
+def parse_env_bool(name: str, *, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None or not raw_value.strip():
+        return default
+
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean-like value")
 
 
 def default_input_source(run_mode: str) -> str:
@@ -210,14 +249,16 @@ def create_app() -> FastAPI:
         lab_mode=config.lab_mode,
     )
     state.configure_beacon(
-        enabled=config.beacon_enabled,
-        target_url=config.control_url,
-        interval_seconds=config.beacon_interval_seconds,
+        channel="primary",
+        enabled=config.primary_beacon_enabled,
+        target_url=config.primary_control_url,
+        interval_seconds=config.primary_beacon_interval_seconds,
     )
     state.configure_poller(
-        enabled=config.poll_enabled,
-        target_url=config.control_url,
-        interval_seconds=config.poll_interval_seconds,
+        channel="primary",
+        enabled=config.primary_poll_enabled,
+        target_url=config.primary_control_url,
+        interval_seconds=config.primary_poll_interval_seconds,
     )
     streamer = StreamerSupervisor(
         config=StreamerConfig(
@@ -235,21 +276,23 @@ def create_app() -> FastAPI:
     )
     beacon = BeaconWorker(
         config=BeaconConfig(
-            enabled=config.beacon_enabled,
-            control_url=config.control_url,
-            interval_seconds=config.beacon_interval_seconds,
-            request_timeout_seconds=config.beacon_timeout_seconds,
+            channel_name="primary",
+            enabled=config.primary_beacon_enabled,
+            control_url=config.primary_control_url,
+            interval_seconds=config.primary_beacon_interval_seconds,
+            request_timeout_seconds=config.primary_beacon_timeout_seconds,
         ),
         state=state,
         logger=logging.getLogger("camera-app.beacon"),
     )
     poller = TaskPoller(
         config=PollerConfig(
-            enabled=config.poll_enabled,
-            control_url=config.control_url,
+            channel_name="primary",
+            enabled=config.primary_poll_enabled,
+            control_url=config.primary_control_url,
             camera_id=config.camera_id,
-            interval_seconds=config.poll_interval_seconds,
-            request_timeout_seconds=config.poll_timeout_seconds,
+            interval_seconds=config.primary_poll_interval_seconds,
+            request_timeout_seconds=config.primary_poll_timeout_seconds,
         ),
         state=state,
         logger=logging.getLogger("camera-app.poller"),
@@ -258,11 +301,12 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         logger.info(
-            "camera-app starting with run_mode=%s lab_mode=%s source_type=%s rtsp_transport=%s",
+            "camera-app starting with run_mode=%s lab_mode=%s source_type=%s rtsp_transport=%s primary_control_url=%s",
             config.run_mode,
             config.lab_mode,
             config.source_type,
             config.rtsp_transport,
+            config.primary_control_url,
         )
         streamer.start()
         beacon.start()
@@ -293,6 +337,7 @@ def create_app() -> FastAPI:
             "camera_id": snapshot["camera_id"],
             "stream_status": stream_status,
             "lab_mode": snapshot["lab_mode"],
+            "primary_control_url": snapshot["control_channels"]["primary"]["base_url"],
         }
         return JSONResponse(
             payload,
