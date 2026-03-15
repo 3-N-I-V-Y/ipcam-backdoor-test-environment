@@ -1,16 +1,18 @@
-{% extends "layout.html" %}
-
-{% block content %}
+{% extends "layout.html" %} {% block content %}
 <section class="section-heading">
   <div>
-    <span class="eyebrow">Archive</span>
-    <h2>Recording segments</h2>
-    <p>Segments are recorded from the RTSP stream with FFmpeg and indexed directly from disk. This becomes the baseline archive before abnormal flows are introduced.</p>
+    <span class="eyebrow">보관 데이터</span>
+    <h2>녹화 세그먼트</h2>
+    <p>
+      RTSP 영상 스트림은 FFmpeg를 통해 분할 녹화 및 디스크 인덱싱 처리됩니다.
+      이렇게 저장된 데이터는 비정상적인 행위가 발생하기 전의 완벽한 정상
+      기준(Baseline) 기록으로 활용됩니다.
+    </p>
   </div>
   <div class="hero-card compact-card">
-    <span class="eyebrow">Storage footprint</span>
+    <span class="eyebrow">스토리지 사용량</span>
     <strong>{{ summary.total_size_human }}</strong>
-    <p>{{ summary.count }} segments retained under the NVR data directory.</p>
+    <p>{{ summary.count }} NVR 데이터 디렉터리에 저장된 세그먼트.</p>
   </div>
 </section>
 
@@ -23,21 +25,27 @@
     <span>Action</span>
   </div>
 
-  {% if recordings %}
-    {% for recording in recordings %}
-    <div class="table-row">
-      <span>
-        <strong>{{ recording.file_name }}</strong>
-        <small>{{ recording.path }}</small>
-      </span>
-      <span>{{ recording.camera_id }}</span>
-      <span>{{ recording.started_at }}</span>
-      <span>{{ recording.size_human }}</span>
-      <span><a href="/recordings/files/{{ recording.camera_id }}/{{ recording.file_name }}">download</a></span>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="empty-block">No recordings yet. Once the RTSP stream is healthy, the NVR recorder will start creating segments automatically.</div>
+  {% if recordings %} {% for recording in recordings %}
+  <div class="table-row">
+    <span>
+      <strong>{{ recording.file_name }}</strong>
+      <small>{{ recording.path }}</small>
+    </span>
+    <span>{{ recording.camera_id }}</span>
+    <span>{{ recording.started_at }}</span>
+    <span>{{ recording.size_human }}</span>
+    <span
+      ><a
+        href="/recordings/files/{{ recording.camera_id }}/{{ recording.file_name }}"
+        >download</a
+      ></span
+    >
+  </div>
+  {% endfor %} {% else %}
+  <div class="empty-block">
+    No recordings yet. Once the RTSP stream is healthy, the NVR recorder will
+    start creating segments automatically.
+  </div>
   {% endif %}
 </section>
 {% endblock %}

@@ -833,6 +833,25 @@ def parse_camera_status_payload(raw_payload: str | None) -> dict[str, Any] | Non
     return payload
 
 
+def format_uptime_label(raw_value: Any) -> str:
+    if raw_value is None:
+        return "unknown"
+
+    try:
+        total_seconds = max(0, int(float(raw_value)))
+    except (TypeError, ValueError):
+        return "unknown"
+
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes = remainder // 60
+
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    if minutes:
+        return f"{minutes}m"
+    return "<1m"
+
+
 def summarize_camera_runtime(status_payload: dict[str, Any] | None) -> dict[str, Any]:
     stream = status_payload.get("stream", {}) if status_payload else {}
     controls = status_payload.get("controls", {}) if status_payload else {}
@@ -861,6 +880,7 @@ def summarize_camera_runtime(status_payload: dict[str, Any] | None) -> dict[str,
         "source_kind": source.get("kind", "unknown"),
         "source_uri": source.get("uri", "-"),
         "uptime_seconds": status_payload.get("uptime_seconds"),
+        "uptime_label": format_uptime_label(status_payload.get("uptime_seconds") if status_payload else None),
         "primary_control_url": primary_channel.get("base_url") or beacon.get("target_url") or poller.get("target_url"),
         "beacon_enabled": beacon.get("enabled"),
         "beacon_status": beacon.get("status", "unknown"),
@@ -1115,13 +1135,13 @@ def create_app() -> FastAPI:
         )
         online_count = sum(1 for camera in cameras if camera["stream_status"] in {"starting", "publishing"})
         stats = [
-            {"label": "Managed Cameras", "value": len(cameras), "hint": "Registered IP assets"},
-            {"label": "Healthy Streams", "value": online_count, "hint": "Publishing or starting"},
-            {"label": "Recording Segments", "value": recordings["count"], "hint": recordings["total_size_human"]},
+            {"label": "연동된 카메라", "value": len(cameras), "hint": "등록된 IP 장비"},
+            {"label": "정상 송출 채널", "value": online_count, "hint": "🟢송출중"},
+            {"label": "녹화 세그먼트", "value": recordings["count"], "hint": recordings["total_size_human"]},
             {
-                "label": "Control Beacons",
+                "label": "상태 보고 신호",
                 "value": control_overview["recent_beacons_count"],
-                "hint": "Normal control-plane activity",
+                "hint": "제어 통신 정상",
             },
         ]
 
