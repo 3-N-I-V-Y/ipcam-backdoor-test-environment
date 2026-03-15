@@ -1,0 +1,43 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<section class="section-heading">
+  <div>
+    <span class="eyebrow">Archive</span>
+    <h2>Recording segments</h2>
+    <p>Segments are recorded from the RTSP stream with FFmpeg and indexed directly from disk. This becomes the baseline archive before abnormal flows are introduced.</p>
+  </div>
+  <div class="hero-card compact-card">
+    <span class="eyebrow">Storage footprint</span>
+    <strong>{{ summary.total_size_human }}</strong>
+    <p>{{ summary.count }} segments retained under the NVR data directory.</p>
+  </div>
+</section>
+
+<section class="table-card">
+  <div class="table-row table-header">
+    <span>File</span>
+    <span>Camera</span>
+    <span>Started</span>
+    <span>Size</span>
+    <span>Action</span>
+  </div>
+
+  {% if recordings %}
+    {% for recording in recordings %}
+    <div class="table-row">
+      <span>
+        <strong>{{ recording.file_name }}</strong>
+        <small>{{ recording.path }}</small>
+      </span>
+      <span>{{ recording.camera_id }}</span>
+      <span>{{ recording.started_at }}</span>
+      <span>{{ recording.size_human }}</span>
+      <span><a href="/recordings/files/{{ recording.camera_id }}/{{ recording.file_name }}">download</a></span>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-block">No recordings yet. Once the RTSP stream is healthy, the NVR recorder will start creating segments automatically.</div>
+  {% endif %}
+</section>
+{% endblock %}

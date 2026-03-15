@@ -1,0 +1,132 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<section class="hero">
+  <div>
+    <span class="eyebrow">Overview</span>
+    <h2>Operational baseline for the camera estate</h2>
+    <p>This console now includes the normal control-plane: camera ingest, RTSP delivery, task polling, beacon reporting, and operator actions.</p>
+  </div>
+  <div class="hero-card">
+    <span class="eyebrow">Normal path</span>
+    <strong>Camera -> Control Server + MediaMTX -> NVR recorder</strong>
+    <p>Use this baseline before adding rogue control, exfiltration, or botnet-like traffic.</p>
+  </div>
+</section>
+
+<section class="stats-grid">
+  {% for stat in stats %}
+  <article class="stat-card">
+    <span class="eyebrow">{{ stat.label }}</span>
+    <strong>{{ stat.value }}</strong>
+    <p>{{ stat.hint }}</p>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="panel-grid">
+  <article class="panel">
+    <div class="panel-heading">
+      <h3>Camera Fleet</h3>
+      <a href="/cameras">Open inventory</a>
+    </div>
+    <div class="list">
+      {% for camera in cameras %}
+      <div class="list-row">
+        <div>
+          <strong>{{ camera.display_name }}</strong>
+          <p>{{ camera.location }} - {{ camera.vendor }} {{ camera.model }}</p>
+        </div>
+        <div class="status-stack">
+          <span class="badge {{ camera.stream_status }}">{{ camera.stream_status }}</span>
+          <small>q={{ camera.runtime.quality }} / overlay={{ camera.runtime.overlay_label }}</small>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-heading">
+      <h3>Latest Recordings</h3>
+      <a href="/recordings">Browse archive</a>
+    </div>
+    <div class="list">
+      {% if recordings %}
+        {% for recording in recordings %}
+        <div class="list-row">
+          <div>
+            <strong>{{ recording.file_name }}</strong>
+            <p>{{ recording.camera_id }}</p>
+          </div>
+          <div class="status-stack">
+            <span>{{ recording.size_human }}</span>
+            <small>{{ recording.started_at }}</small>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="empty-state">No recording segments have been archived yet.</p>
+      {% endif %}
+    </div>
+  </article>
+
+  <article class="panel wide">
+    <div class="panel-heading">
+      <h3>Normal Control Plane</h3>
+      <a href="/control">Open control view</a>
+    </div>
+    {% if control_overview.healthy %}
+    <div class="list">
+      <div class="list-row">
+        <div>
+          <strong>Recent beacons</strong>
+          <p>Camera heartbeat activity observed by the normal management server.</p>
+        </div>
+        <div class="status-stack">
+          <span>{{ control_overview.recent_beacons_count }}</span>
+          <small>{{ control_overview.active_camera_count }} active cameras</small>
+        </div>
+      </div>
+      <div class="list-row">
+        <div>
+          <strong>Pending tasks</strong>
+          <p>Queued operator actions waiting for the camera poller.</p>
+        </div>
+        <div class="status-stack">
+          <span>{{ control_overview.pending_tasks_count }}</span>
+          <small>{{ control_overview.recent_results_count }} recent results</small>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <p class="empty-state">Control server unavailable: {{ control_overview.error }}</p>
+    {% endif %}
+  </article>
+
+  <article class="panel wide">
+    <div class="panel-heading">
+      <h3>Recent Audit</h3>
+      <a href="/audit">View all events</a>
+    </div>
+    <div class="list">
+      {% if audit_events %}
+        {% for event in audit_events %}
+        <div class="list-row">
+          <div>
+            <strong>{{ event.event_type }}</strong>
+            <p>{{ event.message }}</p>
+          </div>
+          <div class="status-stack">
+            <span>{{ event.actor }}</span>
+            <small>{{ event.created_at }}</small>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="empty-state">Audit events will appear after sign-in and configuration changes.</p>
+      {% endif %}
+    </div>
+  </article>
+</section>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<section class="section-heading">
+  <div>
+    <span class="eyebrow">Audit</span>
+    <h2>Operator and system activity</h2>
+    <p>This log becomes useful later when you correlate legitimate admin actions against NDR alerts and adversary scenarios.</p>
+  </div>
+</section>
+
+<section class="table-card">
+  <div class="table-row table-header">
+    <span>Time</span>
+    <span>Actor</span>
+    <span>Event</span>
+    <span>Target</span>
+    <span>Message</span>
+  </div>
+
+  {% for event in audit_events %}
+  <div class="table-row">
+    <span>{{ event.created_at }}</span>
+    <span>{{ event.actor }}</span>
+    <span>{{ event.event_type }}</span>
+    <span>{{ event.target_type }} / {{ event.target_id }}</span>
+    <span>{{ event.message }}</span>
+  </div>
+  {% endfor %}
+</section>
+{% endblock %}

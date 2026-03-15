@@ -1,686 +1,345 @@
 # ipcam-backdoor-test-environment
 
-연구용 IP 카메라 테스트베드다. 실제 악성 백도어는 구현하지 않고, lab-only / explicit opt-in 조건에서만 동작하는 안전한 control-plane을 가진 카메라 환경을 만든다.
+실제 IP 카메라 시스템처럼 보이는 baseline 환경을 먼저 만들고, 그 위에 취약점 시나리오와 NDR 탐지를 얹기 위한 프로젝트입니다.
 
-현재 단계의 목표는 `camera-app`을 중심으로 카메라 본체를 먼저 완성하는 것이다.
+현재는 `1단계 baseline 구축`과 `정상 관리 채널(primary control channel)`까지 구현된 상태입니다.
 
-- 영상 입력을 받아 RTSP로 송출
-- 상태 API 제공
-- 선택적으로 beacon / poll-task 활성화
-- safe command를 실제 스트림 변화로 연결
+## 현재 구현 범위
 
-## 프로젝트 범위
+- `camera-app`
+  - 카메라 역할
+  - RTSP 송출
+  - `/health`, `/status` API
+  - 정상 관리 서버를 향한 primary beacon / task polling
+  - safe command 처리
+    - `get_status`
+    - `set_quality`
+    - `toggle_overlay`
+    - `record_marker`
 
-포함:
+- `mediamtx`
+  - RTSP/HLS 미디어 서버
 
-- 파일 소스 또는 웹캠 소스 입력
-- RTSP 송출
-- 상태 조회
-- safe beacon
-- safe poll-task
-- 화질 변경
-- overlay on/off
-- marker 기록
+- `control-server`
+  - 정상 관리용 control plane
+  - beacon 수신
+  - task queue
+  - result 수집
 
-제외:
-
-- 원격 쉘
-- 인증 우회
-- 지속성
-- 탐지 회피
-- 임의 명령 실행
-- 외부 임의 서버로의 비밀 유출
+- `nvr-console`
+  - 관리자 로그인
+  - 카메라 목록 / 상세
+  - 정상 control-plane 모니터링 화면
+  - safe task 실행 UI
+  - 녹화 archive
+  - audit log
 
 ## 현재 구조
 
-```text
-ipcam-backdoor-test-environment/
-├─ .devcontainer/
-│  └─ devcontainer.json
-├─ docs/
-│  └─ architecture.md
-├─ samples/
-│  └─ demo.mp4
-├─ services/
-│  ├─ camera-app/
-│  │  ├─ Dockerfile
-│  │  ├─ beacon.py
-│  │  ├─ main.py
-│  │  ├─ poller.py
-│  │  ├─ requirements.txt
-│  │  ├─ run-local.ps1
-│  │  ├─ run-local.sh
-│  │  ├─ source.py
-│  │  ├─ state.py
-│  │  └─ streamer.py
-│  ├─ control-server/
-│  │  ├─ app.py
-│  │  ├─ Dockerfile
-│  │  └─ requirements.txt
-│  ├─ mediamtx/
-│  │  └─ mediamtx.yml
-│  └─ mock-camera/
-│     ├─ Dockerfile
-│     └─ start.sh
-├─ compose.hardware.yaml
-├─ compose.yaml
-└─ README.md
-```
-
-## 구성요소 역할
-
-- `.devcontainer`
-  - 팀 공용 개발환경 정의
-- `samples/demo.mp4`
-  - file source 테스트 입력 영상
-- `services/mediamtx`
-  - RTSP 허브
-- `services/control-server`
-  - 연구용 control API 서버
-- `services/camera-app`
-  - 현재 카메라 본체
-- `compose.yaml`
-  - 공용 기본 실행 기준
-- `compose.hardware.yaml`
-  - Linux webcam 하드웨어 override
-
-## 아키텍처
-
-### 영상 경로
+정상 baseline 경로:
 
 ```text
-input source
-  -> camera-app / streamer.py
-  -> ffmpeg
-  -> mediamtx
-  -> VLC
+camera-app -> control-server + MediaMTX -> nvr-console/recorder -> recordings archive
 ```
 
-### control-plane 경로
+운영자 경로:
 
 ```text
-camera-app
-  -> /health, /status
-
-camera-app
-  -> beacon
-  -> control-server
-
-camera-app
-  -> poll / task / result
-  -> control-server
+browser -> nvr-console -> cameras / control / recordings / audit
 ```
 
-## camera-app 내부 구조
+중요한 점:
 
-- `main.py`
-  - 실행 진입점
-  - 환경변수 로드
-  - FastAPI 앱 생성
-  - streamer / beacon / poller lifecycle 관리
-- `state.py`
-  - 중앙 상태 저장소
-  - stream 상태
-  - control 상태
-  - beacon / poller 상태
-  - safe command 적용
-- `source.py`
-  - 입력 소스 추상화
-  - `FileSource`
-  - `WebcamSource`
-  - Linux `v4l2`, Windows `dshow` 지원
-- `streamer.py`
-  - ffmpeg supervisor
-  - RTSP publish
-  - `set_quality`, `toggle_overlay` 반영 시 ffmpeg 재시작
-- `beacon.py`
-  - `LAB_MODE=beacon` 일 때 상태 beacon 전송
-- `poller.py`
-  - `LAB_MODE=poll` 일 때 task polling 및 result 보고
+- 정상 관리 채널은 `LAB_MODE`와 분리되어 항상 동작합니다.
+- `camera-app`는 `PRIMARY_CONTROL_URL`을 향해 beacon/poll 합니다.
+- `LAB_MODE`는 이후 rogue/C2 시나리오를 붙일 때 사용하는 라벨 성격입니다.
 
-## 현재 지원 기능
+## 서비스와 포트
 
-### source
+- `8080`: `control-server`
+- `8090`: `camera-app` API
+- `8091`: `nvr-console`
+- `8554`: RTSP
+- `8888`: HLS
 
-- `file`
-  - `samples/demo.mp4` 사용
-- `webcam`
-  - Linux `v4l2`
-  - Windows `dshow`
+## 빠른 시작
 
-### API
+### 요구 사항
 
-- `GET /health`
-- `GET /status`
+- Docker Desktop
+- VLC 같은 RTSP 플레이어
 
-### beacon
-
-- `LAB_MODE=none`
-- `LAB_MODE=beacon`
-
-### poll-task
-
-- `LAB_MODE=poll`
-- `LAB_MODE=beacon,poll`
-
-### safe command
-
-- `noop`
-- `get_status`
-- `set_quality`
-- `toggle_overlay`
-- `record_marker`
-
-## 실제 반영되는 command
-
-### 1. set_quality
-
-`low`, `medium`, `high` 중 하나를 적용한다.
-
-현재 구현에서는:
-
-- 상태 변경
-- ffmpeg 재시작
-- bitrate profile 변경
-
-까지 실제로 연결되어 있다.
-
-확인 포인트:
-
-- `controls.quality`
-- `stream.applied_quality`
-- `stream.status`
-
-### 2. toggle_overlay
-
-영상 좌상단에 연구용 텍스트 overlay를 켜고 끈다.
-
-표시 예시:
-
-```text
-LAB MODE | camera-app-001 | quality=low
-```
-
-현재 구현에서는:
-
-- 상태 변경
-- ffmpeg 재시작
-- `drawtext` overlay 반영
-
-까지 실제로 연결되어 있다.
-
-확인 포인트:
-
-- `controls.overlay_enabled`
-- `stream.applied_overlay_enabled`
-- `stream.status`
-
-### 3. record_marker
-
-상태 저장소의 marker 목록에 메모를 남긴다.
-
-확인 포인트:
-
-- `markers`
-
-## 실행 모드
-
-### 1. Full Docker Mode
-
-공용 기본 실행 방식이다.
-
-- `mediamtx`, `control-server`, `camera-app` 전부 Docker로 실행
-- 기본 source는 `file`
-- 기본 입력은 `/samples/demo.mp4`
-
-기본 RTSP URL:
-
-```text
-rtsp://localhost:8554/cam1
-```
-
-### 2. Local Camera-App Mode
-
-개발/디버깅용 실행 방식이다.
-
-- `mediamtx`, `control-server`만 Docker로 실행
-- `camera-app`은 로컬 프로세스로 직접 실행
-- Windows webcam, ffmpeg 입력 인자, 장치 문제를 디버깅할 때 사용
-
-로컬 모드 기본값:
-
-- `RUN_MODE=local`
-- `RTSP_URL=rtsp://localhost:8554/cam1`
-- `CONTROL_URL=http://localhost:8080`
-- `API_HOST=127.0.0.1`
-- `RTSP_TRANSPORT=tcp`
-
-## 실행 방법
-
-### 1. Docker 전체 실행
-
-가장 기본적인 공용 실행 방식이다.
+### 전체 실행
 
 ```powershell
 docker compose up -d --build
 ```
 
-이 방식은 아래를 한 번에 실행한다.
+서비스 상태 확인:
+
+```powershell
+docker compose ps
+```
+
+정상이라면 아래 4개가 떠 있어야 합니다.
 
 - `mediamtx`
 - `control-server`
 - `camera-app`
+- `nvr-console`
 
-기본값:
+### 전체 중지
 
-- `RUN_MODE=docker`
-- `LAB_MODE=none`
+```powershell
+docker compose stop
+docker compose down
+```
+
+### 로그 확인
+
+```powershell
+docker compose logs -f
+docker compose logs camera-app
+docker compose logs control-server
+docker compose logs nvr-console
+```
+
+## 접속 주소
+
+- NVR 로그인: `http://localhost:8091/login`
+- NVR 대시보드: `http://localhost:8091/`
+- 카메라 목록: `http://localhost:8091/cameras`
+- 카메라 상세: `http://localhost:8091/cameras/camera-app-001`
+- Control 화면: `http://localhost:8091/control`
+- Recordings: `http://localhost:8091/recordings`
+- Audit: `http://localhost:8091/audit`
+- HLS: `http://localhost:8888/cam1/index.m3u8`
+
+기본 관리자 계정:
+
+- ID: `admin`
+- PW: `lab-admin`
+
+## 기본 확인 방법
+
+### 1. 헬스체크
+
+```powershell
+Invoke-RestMethod http://localhost:8080/health
+Invoke-RestMethod http://localhost:8090/health
+Invoke-RestMethod http://localhost:8091/health
+```
+
+### 2. RTSP 재생
+
+호스트에서 VLC로 확인할 때는 아래 주소를 사용합니다.
+
+```text
+rtsp://localhost:8554/cam1
+```
+
+`rtsp://mediamtx:8554/cam1` 는 컨테이너 내부 이름이라 호스트 VLC에서는 보통 쓰지 않습니다.
+
+### 3. camera-app 상태 확인
+
+```powershell
+Invoke-RestMethod http://localhost:8090/status | ConvertTo-Json -Depth 10
+```
+
+주요 확인 필드:
+
+- `stream.status`
+- `controls.quality`
+- `controls.overlay_enabled`
+- `source.kind`
+- `control_channels.primary.base_url`
+- `control_channels.primary.beacon.status`
+- `control_channels.primary.poller.status`
+- `lab_mode`
+
+정상 예시:
+
+- `stream.status = publishing`
+- `lab_mode = none`
+- `control_channels.primary.base_url = http://control-server:8080`
+
+### 4. 정상 control-plane 확인
+
+```powershell
+Invoke-RestMethod http://localhost:8080/beacons | ConvertTo-Json -Depth 6
+Invoke-RestMethod http://localhost:8080/tasks | ConvertTo-Json -Depth 6
+Invoke-RestMethod http://localhost:8080/results | ConvertTo-Json -Depth 8
+```
+
+최신 beacon/result에서 확인할 값:
+
+- `camera_id = camera-app-001`
+- `control_channel = primary`
+- `lab_mode = none`
+
+주의:
+
+- `control-server`는 현재 메모리 저장이라 재시작 전의 예전 기록이 같이 보일 수 있습니다.
+
+### 5. NVR 화면에서 확인
+
+카메라 상세 페이지에서 다음을 볼 수 있습니다.
+
+- 현재 스트림 상태
+- 현재 품질
+- 오버레이 on/off
+- beacon 상태
+- poller 상태
+- 최근 beacon / pending task / recent result
+
+## Safe task 테스트
+
+NVR 카메라 상세 화면에서 직접 실행하거나, API로 테스트할 수 있습니다.
+
+### API 예시
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://localhost:8080/tasks `
+  -ContentType "application/json" `
+  -Body '{"camera_id":"camera-app-001","command":"get_status","params":{}}'
+```
+
+몇 초 뒤 결과 확인:
+
+```powershell
+Invoke-RestMethod http://localhost:8080/results | ConvertTo-Json -Depth 8
+```
+
+지원하는 safe task:
+
+- `get_status`
+- `set_quality`
+- `toggle_overlay`
+- `record_marker`
+
+## 녹화
+
+### 녹화 확인
+
+- 페이지: `http://localhost:8091/recordings`
+- 실제 저장 경로: `data/recordings`
+
+기본 segment 길이:
+
+- `60초`
+
+짧게 테스트하려면:
+
+```powershell
+$env:NVR_RECORDING_SEGMENT_SECONDS="15"
+docker compose up -d --build nvr-console
+```
+
+### 녹화 끄기 / 켜기
+
+1. `http://localhost:8091/cameras/camera-app-001`
+2. `Recording Mode`
+3. `Continuous` 또는 `Disabled`
+4. `Save camera settings`
+
+설명:
+
+- `Continuous`: 계속 녹화
+- `Disabled`: 새 녹화 중지
+
+주의:
+
+- 기존 파일은 자동 삭제되지 않습니다.
+- `retention_days`는 현재 메타데이터만 저장하고 실제 자동 삭제는 아직 없습니다.
+
+## 로컬 실행
+
+### Windows
+
+```powershell
+$env:RUN_MODE="local"
+.\services\camera-app\run-local.ps1
+```
+
+### Linux / macOS
+
+```bash
+RUN_MODE=local ./services/camera-app/run-local.sh
+```
+
+로컬 기본값:
+
 - `SOURCE_TYPE=file`
-- `INPUT_SOURCE=/samples/demo.mp4`
+- `INPUT_SOURCE=<repo>/samples/demo.mp4`
+- `RTSP_URL=rtsp://localhost:8554/cam1`
+- `PRIMARY_CONTROL_URL=http://localhost:8080`
 
-확인:
+## 주요 환경변수
 
-- Control API: `http://localhost:8080/health`
-- Camera API: `http://localhost:8090/health`
-- RTSP: `rtsp://localhost:8554/cam1`
-
-### 2. Docker 실행 시 LAB_MODE 설정
-
-`compose.yaml`에서 `camera-app`은 아래 환경변수를 사용한다.
+### camera-app
 
 - `CAMERA_APP_LAB_MODE`
 - `CAMERA_APP_SOURCE_TYPE`
-- `CAMERA_APP_CONTROL_URL`
+- `CAMERA_APP_PRIMARY_CONTROL_URL`
+- `CAMERA_APP_PRIMARY_BEACON_ENABLED`
+- `CAMERA_APP_PRIMARY_POLL_ENABLED`
+- `CAMERA_APP_PRIMARY_BEACON_INTERVAL_SECONDS`
+- `CAMERA_APP_PRIMARY_BEACON_TIMEOUT_SECONDS`
+- `CAMERA_APP_PRIMARY_POLL_INTERVAL_SECONDS`
+- `CAMERA_APP_PRIMARY_POLL_TIMEOUT_SECONDS`
 - `CAMERA_APP_WEBCAM_BACKEND`
 - `CAMERA_APP_WEBCAM_DEVICE`
 - `CAMERA_APP_WEBCAM_FRAMERATE`
 - `CAMERA_APP_WEBCAM_RESOLUTION`
 - `CAMERA_APP_WEBCAM_INPUT_FORMAT`
 
-#### beacon만 켜기
+### nvr-console
 
-```powershell
-$env:CAMERA_APP_LAB_MODE="beacon"
-docker compose up -d --build camera-app
-```
+- `NVR_ADMIN_USERNAME`
+- `NVR_ADMIN_PASSWORD`
+- `NVR_RECORDING_SEGMENT_SECONDS`
+- `NVR_DEFAULT_RETENTION_DAYS`
 
-#### poll만 켜기
+## 현재 한계
 
-```powershell
-$env:CAMERA_APP_LAB_MODE="poll"
-docker compose up -d --build camera-app
-```
+- `control-server`는 메모리 기반이라 재시작 시 beacon/task/result 이력이 사라짐
+- NVR 페이지 내장 영상 재생 UI 없음
+- retention 기반 자동 삭제 없음
+- 다중 카메라 등록 UI 없음
+- `rogue-control-server` 없음
+- abnormal control channel 시나리오 아직 없음
+- NDR 탐지 엔진 아직 없음
 
-#### beacon + poll 같이 켜기
+## 권장 다음 단계
 
-```powershell
-$env:CAMERA_APP_LAB_MODE="beacon,poll"
-docker compose up -d --build camera-app
-```
+가장 먼저 추천하는 단계는 `rogue-control-server 추가`입니다.
 
-#### 다시 기본값으로 되돌리기
+이유:
 
-```powershell
-$env:CAMERA_APP_LAB_MODE="none"
-docker compose up -d --build camera-app
-```
+- 지금은 정상 관리 채널(primary)은 완성되어 있습니다.
+- 다음부터는 `정상과 동일한 task/beacon 메커니즘`을 쓰는 비인가 서버가 필요합니다.
+- 그래야 NDR이 `task/beacon 자체`가 아니라 `비인가 목적지와의 task/beacon`을 탐지할 수 있습니다.
 
-확인 포인트:
+추천 순서:
 
-- `/status` 의 `lab_mode`
-- `/status` 의 `beacon.enabled`
-- `/status` 의 `poller.enabled`
+1. `rogue-control-server` 추가
+2. `camera-app`에 secondary/rogue 채널 붙이기
+3. `scenario_id`, `run_id` 같은 ground truth 저장
+4. abnormal beacon/poll 시나리오 추가
+5. NDR 규칙 또는 MVP 구현
+6. 탐지 검증
 
-### 3. Docker + Linux webcam 실행
+## 체크리스트
 
-이 방식은 Linux `v4l2` 환경에서만 사용한다.
+1. `docker compose ps`에서 4개 서비스가 모두 `Up`
+2. `http://localhost:8090/health` 응답 확인
+3. `http://localhost:8091/login` 로그인 성공
+4. VLC에서 `rtsp://localhost:8554/cam1` 재생 성공
+5. `/status`에서 `control_channels.primary` 확인
+6. `/beacons`에서 최신 항목 `control_channel=primary` 확인
+7. `get_status` task 후 `/results`에서 성공 결과 확인
+8. `/recordings` 또는 `data/recordings`에서 녹화 파일 생성 확인
 
-```powershell
-$env:CAMERA_APP_LAB_MODE="poll"
-$env:CAMERA_APP_SOURCE_TYPE="webcam"
-$env:CAMERA_APP_WEBCAM_BACKEND="v4l2"
-$env:CAMERA_APP_WEBCAM_DEVICE="/dev/video0"
-docker compose -f compose.yaml -f compose.hardware.yaml up -d --build
-```
-
-설명:
-
-- 기본 `compose.yaml` 위에 `compose.hardware.yaml`을 추가 적용
-- `camera-app`이 webcam source로 실행
-- `devices` 매핑을 통해 Linux 카메라 장치를 컨테이너에 연결
-
-### 4. Local camera-app 실행
-
-개발/디버깅용 권장 방식이다.
-
-이 방식은:
-
-- `mediamtx`, `control-server`는 Docker로 실행
-- `camera-app`은 로컬 Python 프로세스로 실행
-
-먼저 인프라만 실행한다.
-
-```powershell
-docker compose up -d mediamtx control-server
-```
-
-그 다음 `camera-app`만 로컬로 실행한다.
-
-Windows:
-
-```powershell
-$env:RUN_MODE="local"
-.\services\camera-app\run-local.ps1
-```
-
-Linux/macOS:
-
-```bash
-RUN_MODE=local ./services/camera-app/run-local.sh
-```
-
-기본값:
-
-- `RUN_MODE=local`
-- `LAB_MODE=none`
-- `SOURCE_TYPE=file`
-- `INPUT_SOURCE=<repo>/samples/demo.mp4`
-- `RTSP_URL=rtsp://localhost:8554/cam1`
-- `CONTROL_URL=http://localhost:8080`
-- `API_HOST=127.0.0.1`
-- `RTSP_TRANSPORT=tcp`
-
-### 5. Local 실행 시 LAB_MODE 설정
-
-로컬 실행에서는 `CAMERA_APP_` 접두사가 아니라 실제 런타임 환경변수 이름을 직접 사용한다.
-
-#### beacon만 켜기
-
-```powershell
-$env:RUN_MODE="local"
-$env:LAB_MODE="beacon"
-.\services\camera-app\run-local.ps1
-```
-
-#### poll만 켜기
-
-```powershell
-$env:RUN_MODE="local"
-$env:LAB_MODE="poll"
-.\services\camera-app\run-local.ps1
-```
-
-#### beacon + poll 같이 켜기
-
-```powershell
-$env:RUN_MODE="local"
-$env:LAB_MODE="beacon,poll"
-.\services\camera-app\run-local.ps1
-```
-
-#### file source + poll 예시
-
-```powershell
-$env:RUN_MODE="local"
-$env:LAB_MODE="poll"
-$env:SOURCE_TYPE="file"
-.\services\camera-app\run-local.ps1
-```
-
-### 6. Local Windows webcam 실행
-
-Windows 내장 웹캠은 `dshow`로 사용한다.
-
-1. FFmpeg로 장치 이름을 확인한다.
-
-```powershell
-ffmpeg -list_devices true -f dshow -i dummy
-```
-
-2. 장치 이름을 `WEBCAM_DEVICE`에 넣어서 실행한다.
-
-```powershell
-$env:RUN_MODE="local"
-$env:LAB_MODE="poll"
-$env:SOURCE_TYPE="webcam"
-$env:WEBCAM_BACKEND="dshow"
-$env:WEBCAM_DEVICE="Integrated Camera"
-.\services\camera-app\run-local.ps1
-```
-
-필요하면 추가 설정:
-
-```powershell
-$env:WEBCAM_RESOLUTION="1280x720"
-$env:WEBCAM_FRAMERATE="30"
-$env:WEBCAM_INPUT_FORMAT="mjpeg"
-```
-
-### 7. Local Linux webcam 실행
-
-```bash
-RUN_MODE=local \
-LAB_MODE=poll \
-SOURCE_TYPE=webcam \
-WEBCAM_BACKEND=v4l2 \
-WEBCAM_DEVICE=/dev/video0 \
-./services/camera-app/run-local.sh
-```
-
-### 8. 실행 후 확인 방법
-
-#### camera-app 상태
-
-```powershell
-Invoke-RestMethod http://localhost:8090/status | ConvertTo-Json -Depth 10
-```
-
-주요 필드:
-
-- `lab_mode`
-- `source.kind`
-- `stream.status`
-- `stream.applied_quality`
-- `stream.applied_overlay_enabled`
-- `stream.last_error`
-- `beacon.enabled`
-- `poller.enabled`
-
-#### control-server task / result
-
-```powershell
-Invoke-RestMethod http://localhost:8080/tasks
-Invoke-RestMethod http://localhost:8080/results
-```
-
-#### VLC 재생
-
-```text
-rtsp://localhost:8554/cam1
-```
-
-## LAB_MODE 요약
-
-- `none`
-  - beacon, poll-task 모두 끔
-- `beacon`
-  - 상태 beacon만 전송
-- `poll`
-  - task polling 및 result 보고만 수행
-- `beacon,poll`
-  - beacon과 poll-task 둘 다 수행
-
-## 환경변수 정리
-
-### 실행 모드
-
-- `RUN_MODE`
-  - `docker`
-  - `local`
-- `LAB_MODE`
-  - `none`
-  - `beacon`
-  - `poll`
-  - `beacon,poll`
-
-### source 관련
-
-- `SOURCE_TYPE`
-  - `file`
-  - `webcam`
-- `INPUT_SOURCE`
-  - file source 경로
-- `WEBCAM_BACKEND`
-  - `v4l2`
-  - `dshow`
-- `WEBCAM_DEVICE`
-  - `v4l2`: `/dev/video0`
-  - `dshow`: `Integrated Camera` 같은 장치 이름
-- `WEBCAM_FRAMERATE`
-- `WEBCAM_RESOLUTION`
-- `WEBCAM_INPUT_FORMAT`
-
-### stream 관련
-
-- `RTSP_URL`
-- `RTSP_TRANSPORT`
-  - `tcp`
-  - `udp`
-- `FFMPEG_BIN`
-- `OVERLAY_FONTFILE`
-
-### control 관련
-
-- `CONTROL_URL`
-- `BEACON_INTERVAL_SECONDS`
-- `BEACON_TIMEOUT_SECONDS`
-- `POLL_INTERVAL_SECONDS`
-- `POLL_TIMEOUT_SECONDS`
-
-## task 등록 예시
-
-### set_quality
-
-```powershell
-Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:8080/tasks `
-  -ContentType "application/json" `
-  -Body '{"camera_id":"camera-app-001","command":"set_quality","params":{"quality":"low"}}'
-```
-
-### toggle_overlay
-
-```powershell
-Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:8080/tasks `
-  -ContentType "application/json" `
-  -Body '{"camera_id":"camera-app-001","command":"toggle_overlay","params":{"enabled":true}}'
-```
-
-### record_marker
-
-```powershell
-Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:8080/tasks `
-  -ContentType "application/json" `
-  -Body '{"camera_id":"camera-app-001","command":"record_marker","params":{"note":"lab marker 001"}}'
-```
-
-## 상태 확인 방법
-
-### camera-app 상태
-
-```powershell
-Invoke-RestMethod http://localhost:8090/status | ConvertTo-Json -Depth 10
-```
-
-중요하게 볼 필드:
-
-- `lab_mode`
-- `source`
-- `stream.status`
-- `stream.applied_quality`
-- `stream.applied_overlay_enabled`
-- `stream.last_error`
-- `controls.quality`
-- `controls.overlay_enabled`
-- `beacon`
-- `poller`
-- `markers`
-
-### control-server 대기 task
-
-```powershell
-Invoke-RestMethod http://localhost:8080/tasks
-```
-
-### control-server 실행 결과
-
-```powershell
-Invoke-RestMethod http://localhost:8080/results
-```
-
-## 검증 기준
-
-### stream 확인
-
-- VLC에서 `rtsp://localhost:8554/cam1` 재생
-
-### quality 변경 확인
-
-- `controls.quality` 변경
-- `stream.applied_quality` 변경
-- VLC 화질 변화 확인
-
-### overlay 확인
-
-- `controls.overlay_enabled=true`
-- `stream.applied_overlay_enabled=true`
-- VLC 화면에 overlay 표시 확인
-
-### poll 모드 확인
-
-- `lab_mode` 가 `poll` 또는 `beacon,poll`
-- `poller.enabled=true`
-
-## 현재 권장 워크플로우
-
-### 공용 기본 테스트
-
-- `compose.yaml`
-- file source
-- VLC 재생
-- `/status` 확인
-
-### 로컬 하드웨어 테스트
-
-- `camera-app` 로컬 실행
-- Windows `dshow` 또는 Linux `v4l2`
-- `mediamtx`, `control-server`는 Docker 유지
-
-### control-plane 테스트
-
-1. `LAB_MODE=poll` 또는 `beacon,poll`로 실행
-2. `/tasks`로 safe command 등록
-3. `/results` 확인
-4. `/status` 확인
-5. VLC에서 실제 스트림 변화 확인
-
-## 현재 상태 요약
-
-현재 프로젝트는 아래 단계까지 완료된 상태다.
-
-- `camera-app` 기반 스트리밍
-- file source / webcam source
-- Docker / local 실행 모드
-- Windows `dshow` webcam 지원
-- beacon
-- safe poll-task
-- `set_quality` 실제 반영
-- `toggle_overlay` 실제 반영
-- `record_marker`
-
-즉 지금은 `카메라 시스템 자체를 먼저 구축한다`는 목표 기준에서, 연구용 safe control channel을 가진 카메라 테스트베드의 핵심 뼈대가 갖춰진 상태다.
+이 체크리스트가 통과되면 현재 baseline과 정상 primary control 채널은 정상 동작 중입니다.

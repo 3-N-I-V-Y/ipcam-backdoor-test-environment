@@ -1,0 +1,250 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<section class="section-heading">
+  <div>
+    <span class="eyebrow">Camera Detail</span>
+    <h2>{{ camera.display_name }}</h2>
+    <p>{{ camera.location }} - {{ camera.vendor }} {{ camera.model }}</p>
+  </div>
+  <div class="status-summary">
+    <span class="badge {{ camera.stream_status }}">{{ camera.stream_status }}</span>
+    <span class="chip">Recorder: {{ recorder_state.get("status", "idle") }}</span>
+  </div>
+</section>
+
+<section class="panel-grid">
+  <article class="panel wide">
+    <div class="panel-heading">
+      <h3>Current Runtime Summary</h3>
+    </div>
+    <div class="runtime-grid">
+      <div class="runtime-card">
+        <span class="eyebrow">Stream</span>
+        <strong>{{ camera.runtime.stream_status }}</strong>
+        <p>revision={{ camera.runtime.config_revision }}</p>
+      </div>
+      <div class="runtime-card">
+        <span class="eyebrow">Quality</span>
+        <strong>{{ camera.runtime.quality }}</strong>
+        <p>applied={{ camera.runtime.applied_quality or "unknown" }}</p>
+      </div>
+      <div class="runtime-card">
+        <span class="eyebrow">Overlay</span>
+        <strong>{{ camera.runtime.overlay_label }}</strong>
+        <p>applied={{ camera.runtime.applied_overlay_enabled }}</p>
+      </div>
+      <div class="runtime-card">
+        <span class="eyebrow">Source</span>
+        <strong>{{ camera.runtime.source_kind }}</strong>
+        <p>{{ camera.runtime.source_uri }}</p>
+      </div>
+      <div class="runtime-card">
+        <span class="eyebrow">Beacon</span>
+        <strong>{{ camera.runtime.beacon_status }}</strong>
+        <p>enabled={{ camera.runtime.beacon_enabled }}</p>
+      </div>
+      <div class="runtime-card">
+        <span class="eyebrow">Poller</span>
+        <strong>{{ camera.runtime.poller_status }}</strong>
+        <p>enabled={{ camera.runtime.poller_enabled }}</p>
+      </div>
+      <div class="runtime-card">
+        <span class="eyebrow">Uptime</span>
+        <strong>{{ camera.runtime.uptime_seconds or "unknown" }}</strong>
+        <p>lab_mode={{ camera.runtime.lab_mode }}</p>
+      </div>
+      <div class="runtime-card">
+        <span class="eyebrow">Markers</span>
+        <strong>{{ camera.runtime.markers_count }}</strong>
+        <p>last_error={{ camera.runtime.last_error or "none" }}</p>
+      </div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-heading">
+      <h3>Network endpoints</h3>
+    </div>
+    <dl class="detail-list">
+      <div>
+        <dt>Status API</dt>
+        <dd>{{ camera.status_url }}</dd>
+      </div>
+      <div>
+        <dt>RTSP URL</dt>
+        <dd>{{ camera.rtsp_url }}</dd>
+      </div>
+      <div>
+        <dt>HLS URL</dt>
+        <dd>{{ camera.hls_url }}</dd>
+      </div>
+      <div>
+        <dt>Last Seen</dt>
+        <dd>{{ camera.last_seen_at or "offline / not yet synchronized" }}</dd>
+      </div>
+      <div>
+        <dt>Current Quality</dt>
+        <dd>{{ camera.runtime.quality }}</dd>
+      </div>
+      <div>
+        <dt>Overlay</dt>
+        <dd>{{ camera.runtime.overlay_label }}</dd>
+      </div>
+    </dl>
+  </article>
+
+  <article class="panel">
+    <div class="panel-heading">
+      <h3>Configuration</h3>
+    </div>
+    <form method="post" action="/cameras/{{ camera.camera_id }}/settings" class="stack-form">
+      <label>
+        <span>Display Name</span>
+        <input type="text" name="display_name" value="{{ camera.display_name }}" required>
+      </label>
+      <label>
+        <span>Location</span>
+        <input type="text" name="location" value="{{ camera.location }}" required>
+      </label>
+      <label>
+        <span>Recording Mode</span>
+        <select name="recording_mode">
+          <option value="continuous" {% if camera.recording_mode == 'continuous' %}selected{% endif %}>Continuous</option>
+          <option value="disabled" {% if camera.recording_mode == 'disabled' %}selected{% endif %}>Disabled</option>
+        </select>
+      </label>
+      <label>
+        <span>Retention (days)</span>
+        <input type="number" name="retention_days" min="1" max="90" value="{{ camera.retention_days }}" required>
+      </label>
+      <button class="primary-button" type="submit">Save camera settings</button>
+    </form>
+  </article>
+
+  <article class="panel">
+    <div class="panel-heading">
+      <h3>Normal Control Tasks</h3>
+    </div>
+    {% if control_feedback %}
+    <p class="info-banner">Control action response: {{ control_feedback }}</p>
+    {% endif %}
+    <form method="post" action="/cameras/{{ camera.camera_id }}/control/task" class="stack-form">
+      <label>
+        <span>Command</span>
+        <select name="command">
+          <option value="get_status">Get Status</option>
+          <option value="set_quality">Set Quality</option>
+          <option value="toggle_overlay">Toggle Overlay</option>
+          <option value="record_marker">Record Marker</option>
+        </select>
+      </label>
+      <label>
+        <span>Quality</span>
+        <select name="quality">
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high" selected>High</option>
+        </select>
+      </label>
+      <label>
+        <span>Overlay</span>
+        <select name="overlay_enabled">
+          <option value="true">Enable</option>
+          <option value="false" selected>Disable</option>
+        </select>
+      </label>
+      <label>
+        <span>Marker Note</span>
+        <input type="text" name="marker_note" placeholder="operator note">
+      </label>
+      <button class="primary-button" type="submit">Queue task on normal control-server</button>
+    </form>
+  </article>
+
+  <article class="panel wide">
+    <div class="panel-heading">
+      <h3>Latest status payload</h3>
+    </div>
+    {% if status_payload %}
+    <pre class="json-block">{{ status_payload | prettyjson }}</pre>
+    {% else %}
+    <p class="empty-state">No status payload has been collected yet.</p>
+    {% endif %}
+  </article>
+
+  <article class="panel wide">
+    <div class="panel-heading">
+      <h3>Normal Control State</h3>
+    </div>
+    {% if control_state.healthy %}
+    <div class="panel-grid compact-grid">
+      <article class="subpanel">
+        <h4>Recent Beacons</h4>
+        <div class="list">
+          {% if control_state.recent_beacons %}
+            {% for beacon in control_state.recent_beacons %}
+            <div class="list-row">
+              <div>
+                <strong>{{ beacon.stream_state }}</strong>
+                <p>{{ beacon.source_kind }} / {{ beacon.lab_mode }}</p>
+              </div>
+              <div class="status-stack">
+                <span>{{ beacon.camera_id }}</span>
+                <small>{{ beacon.received_at }}</small>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p class="empty-state">No beacons received yet.</p>
+          {% endif %}
+        </div>
+      </article>
+
+      <article class="subpanel">
+        <h4>Pending Tasks</h4>
+        <div class="list">
+          {% if control_state.pending_tasks %}
+            {% for task in control_state.pending_tasks %}
+            <div class="list-row">
+              <div>
+                <strong>{{ task.command }}</strong>
+                <p>{{ task.params }}</p>
+              </div>
+              <div class="status-stack">
+                <span>{{ task.id }}</span>
+                <small>{{ task.created_at }}</small>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p class="empty-state">No pending tasks.</p>
+          {% endif %}
+        </div>
+      </article>
+    </div>
+
+    <div class="list top-gap">
+      {% if control_state.recent_results %}
+        {% for result in control_state.recent_results %}
+        <div class="list-row">
+          <div>
+            <strong>{{ result.command }}</strong>
+            <p>{{ "success" if result.success else "failed" }}{% if result.error %}: {{ result.error }}{% endif %}</p>
+          </div>
+          <div class="status-stack">
+            <span>{{ result.task_id }}</span>
+            <small>{{ result.received_at }}</small>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="empty-state">No task results have been reported yet.</p>
+      {% endif %}
+    </div>
+    {% else %}
+    <p class="empty-state">Control server unavailable: {{ control_state.error }}</p>
+    {% endif %}
+  </article>
+</section>
+{% endblock %}

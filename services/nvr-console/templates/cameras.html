@@ -1,0 +1,51 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<section class="section-heading">
+  <div>
+    <span class="eyebrow">Inventory</span>
+    <h2>Managed cameras</h2>
+    <p>Each camera keeps the normal control-plane endpoint, RTSP publish target, recorder state, and retention profile needed for later scenario injection.</p>
+  </div>
+</section>
+
+<section class="table-card">
+  <div class="table-row table-header">
+    <span>Name</span>
+    <span>Network</span>
+    <span>Stream</span>
+    <span>Runtime</span>
+    <span>Recorder</span>
+    <span>Retention</span>
+  </div>
+
+  {% for camera in cameras %}
+  <a class="table-row table-link" href="/cameras/{{ camera.camera_id }}">
+    <span>
+      <strong>{{ camera.display_name }}</strong>
+      <small>{{ camera.camera_id }}</small>
+    </span>
+    <span>
+      <strong>{{ camera.location }}</strong>
+      <small>{{ camera.vendor }} {{ camera.model }}</small>
+    </span>
+    <span>
+      <span class="badge {{ camera.stream_status }}">{{ camera.stream_status }}</span>
+      <small>{{ camera.rtsp_url }}</small>
+    </span>
+    <span>
+      <strong>quality={{ camera.runtime.quality }}</strong>
+      <small>overlay={{ camera.runtime.overlay_label }} / source={{ camera.runtime.source_kind }}</small>
+    </span>
+    <span>
+      <strong>{{ recorder_state.get(camera.camera_id, {}).get("status", "idle") }}</strong>
+      <small>mode={{ camera.recording_mode }} / poller={{ camera.runtime.poller_status }}</small>
+    </span>
+    <span>
+      <strong>{{ camera.retention_days }} days</strong>
+      <small>{{ camera.last_seen_at or "not polled yet" }}</small>
+    </span>
+  </a>
+  {% endfor %}
+</section>
+{% endblock %}

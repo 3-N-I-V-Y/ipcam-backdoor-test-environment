@@ -13,6 +13,7 @@ from state import CameraState
 class BeaconConfig:
     enabled: bool
     control_url: str
+    channel_name: str = "primary"
     interval_seconds: float = 10.0
     request_timeout_seconds: float = 3.0
 
@@ -34,7 +35,7 @@ class BeaconWorker:
 
     def start(self) -> None:
         if not self._config.enabled:
-            self._logger.info("beacon mode disabled")
+            self._logger.info("%s beacon disabled", self._config.channel_name)
             return
 
         if self._thread and self._thread.is_alive():
@@ -43,7 +44,7 @@ class BeaconWorker:
         self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._run_loop,
-            name="camera-beacon",
+            name=f"camera-beacon-{self._config.channel_name}",
             daemon=True,
         )
         self._thread.start()
@@ -55,7 +56,7 @@ class BeaconWorker:
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=timeout)
-        self._state.mark_beacon_stopped()
+        self._state.mark_beacon_stopped(channel=self._config.channel_name)
 
     def _run_loop(self) -> None:
         while not self._stop_event.is_set():
@@ -77,31 +78,42 @@ class BeaconWorker:
             method="POST",
         )
 
-        self._state.mark_beacon_sending()
+        self._state.mark_beacon_sending(channel=self._config.channel_name)
 
         try:
             with request.urlopen(req, timeout=self._config.request_timeout_seconds) as response:
-                self._state.mark_beacon_sent(response_status=response.status)
+                self._state.mark_beacon_sent(
+                    channel=self._config.channel_name,
+                    response_status=response.status,
+                )
         except error.HTTPError as exc:
-            message = f"beacon HTTP error: {exc.code}"
+            message = f"{self._config.channel_name} beacon HTTP error: {exc.code}"
             self._logger.warning(message)
             self._state.mark_beacon_failed(
+                channel=self._config.channel_name,
                 error=message,
                 response_status=exc.code,
             )
         except error.URLError as exc:
-            message = f"beacon connection error: {exc.reason}"
+            message = f"{self._config.channel_name} beacon connection error: {exc.reason}"
             self._logger.warning(message)
-            self._state.mark_beacon_failed(error=message)
+            self._state.mark_beacon_failed(
+                channel=self._config.channel_name,
+                error=message,
+            )
         except Exception as exc:
-            message = f"beacon unexpected error: {exc}"
+            message = f"{self._config.channel_name} beacon unexpected error: {exc}"
             self._logger.exception(message)
-            self._state.mark_beacon_failed(error=message)
+            self._state.mark_beacon_failed(
+                channel=self._config.channel_name,
+                error=message,
+            )
 
     def _build_payload(self) -> dict:
         snapshot = self._state.snapshot()
         return {
             "camera_id": snapshot["camera_id"],
+            "control_channel": self._config.channel_name,
             "lab_mode": snapshot["lab_mode"],
             "stream_state": snapshot["stream"]["status"],
             "source_kind": snapshot["source"]["kind"],
