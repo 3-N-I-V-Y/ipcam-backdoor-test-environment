@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ page_title }}</title>
+    <link
+      rel="stylesheet"
+      href="{{ request.url_for('static', path='app.css') }}"
+    />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <h1>디지턈 혁명군 NVR</h1>
+          <p>카메라 비디오 관리 및 운영 콘솔</p>
+        </div>
+
+        {% if current_user %}
+        <nav class="nav">
+          <a
+            class="{{ 'active' if active_nav == 'dashboard' else '' }}"
+            href="/"
+            >Overview</a
+          >
+          <a
+            class="{{ 'active' if active_nav == 'cameras' else '' }}"
+            href="/cameras"
+            >Cameras</a
+          >
+          <a
+            class="{{ 'active' if active_nav == 'control' else '' }}"
+            href="/control"
+            >Control</a
+          >
+          <a
+            class="{{ 'active' if active_nav == 'recordings' else '' }}"
+            href="/recordings"
+            >Recordings</a
+          >
+          <a
+            class="{{ 'active' if active_nav == 'audit' else '' }}"
+            href="/audit"
+            >Audit</a
+          >
+        </nav>
+
+        <form method="post" action="/logout" class="logout-form">
+          <div class="operator-card">
+            <span class="eyebrow">Signed in as</span>
+            <strong>{{ current_user }}</strong>
+          </div>
+          <button class="secondary-button" type="submit">Sign out</button>
+        </form>
+        {% endif %}
+      </aside>
+
+      <main class="content">{% block content %}{% endblock %}</main>
+    </div>
+  </body>
+</html>

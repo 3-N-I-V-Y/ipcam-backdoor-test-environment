@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ page_title }}</title>
+    <link
+      rel="stylesheet"
+      href="{{ request.url_for('static', path='app.css') }}"
+    />
+  </head>
+  <body class="login-body">
+    <section class="login-panel">
+      <div class="brand compact">
+        <h1>디지턈 혁명군 NVR</h1>
+        <p>Administrator console for the lab IP camera.</p>
+      </div>
+
+      <form method="post" action="/login" class="stack-form">
+        <label>
+          <span>Username</span>
+          <input type="text" name="username" autocomplete="username" required />
+        </label>
+        <label>
+          <span>Password</span>
+          <input
+            type="password"
+            name="password"
+            autocomplete="current-password"
+            required
+          />
+        </label>
+        {% if error %}
+        <p class="error-banner">{{ error }}</p>
+        {% endif %}
+        <button class="primary-button" type="submit">Sign in to Console</button>
+      </form>
+
+      <div class="login-footnote">
+        디지턈 혁명군의 캡스톤디자인을 위해 생성된 가상의 IP카메라 NVR 관리자
+        페이지입니다.
+      </div>
+    </section>
+  </body>
+</html>

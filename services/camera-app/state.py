@@ -15,6 +15,40 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def default_beacon_state() -> dict[str, Any]:
+    return {
+        "enabled": False,
+        "status": "disabled",
+        "target_url": None,
+        "interval_seconds": None,
+        "last_attempt_at": None,
+        "last_sent_at": None,
+        "last_response_status": None,
+        "last_error": None,
+        "consecutive_failures": 0,
+    }
+
+
+def default_poller_state() -> dict[str, Any]:
+    return {
+        "enabled": False,
+        "status": "disabled",
+        "target_url": None,
+        "interval_seconds": None,
+        "last_poll_at": None,
+        "last_result_posted_at": None,
+        "last_result_response_status": None,
+        "last_error": None,
+        "consecutive_failures": 0,
+        "last_task_id": None,
+        "last_task_command": None,
+        "last_task_status": None,
+        "last_task_received_at": None,
+        "last_task_completed_at": None,
+        "last_task_result": None,
+    }
+
+
 class CameraState:
     def __init__(
         self,
@@ -59,37 +93,21 @@ class CameraState:
                 "quality": "high",
                 "overlay_enabled": False,
             },
-            "beacon": {
-                "enabled": False,
-                "status": "disabled",
-                "target_url": None,
-                "interval_seconds": None,
-                "last_attempt_at": None,
-                "last_sent_at": None,
-                "last_response_status": None,
-                "last_error": None,
-                "consecutive_failures": 0,
+            "control_channels": {
+                "primary": {
+                    "name": "primary",
+                    "role": "normal-management",
+                    "base_url": None,
+                    "beacon": default_beacon_state(),
+                    "poller": default_poller_state(),
+                },
             },
-            "poller": {
-                "enabled": False,
-                "status": "disabled",
-                "target_url": None,
-                "interval_seconds": None,
-                "last_poll_at": None,
-                "last_result_posted_at": None,
-                "last_result_response_status": None,
-                "last_error": None,
-                "consecutive_failures": 0,
-                "last_task_id": None,
-                "last_task_command": None,
-                "last_task_status": None,
-                "last_task_received_at": None,
-                "last_task_completed_at": None,
-                "last_task_result": None,
-            },
+            "beacon": default_beacon_state(),
+            "poller": default_poller_state(),
             "markers": deque(maxlen=50),
             "updated_at": utc_now(),
         }
+        self._sync_primary_aliases()
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -186,32 +204,37 @@ class CameraState:
     def configure_beacon(
         self,
         *,
+        channel: str = "primary",
         enabled: bool,
         target_url: str | None,
         interval_seconds: float | None,
     ) -> None:
         with self._lock:
-            beacon = self._status["beacon"]
+            control_channel = self._ensure_control_channel(channel)
+            control_channel["base_url"] = target_url
+            beacon = control_channel["beacon"]
             beacon["enabled"] = enabled
             beacon["status"] = "idle" if enabled else "disabled"
             beacon["target_url"] = target_url if enabled else None
             beacon["interval_seconds"] = interval_seconds if enabled else None
             beacon["last_error"] = None
+            self._sync_channel_aliases(channel)
             self._touch()
 
-    def mark_beacon_sending(self) -> None:
+    def mark_beacon_sending(self, *, channel: str = "primary") -> None:
         with self._lock:
-            beacon = self._status["beacon"]
+            beacon = self._ensure_control_channel(channel)["beacon"]
             if not beacon["enabled"]:
                 return
             beacon["status"] = "sending"
             beacon["last_attempt_at"] = utc_now()
             beacon["last_error"] = None
+            self._sync_channel_aliases(channel)
             self._touch()
 
-    def mark_beacon_sent(self, *, response_status: int) -> None:
+    def mark_beacon_sent(self, *, channel: str = "primary", response_status: int) -> None:
         with self._lock:
-            beacon = self._status["beacon"]
+            beacon = self._ensure_control_channel(channel)["beacon"]
             if not beacon["enabled"]:
                 return
             beacon["status"] = "ok"
@@ -219,71 +242,81 @@ class CameraState:
             beacon["last_response_status"] = response_status
             beacon["last_error"] = None
             beacon["consecutive_failures"] = 0
+            self._sync_channel_aliases(channel)
             self._touch()
 
     def mark_beacon_failed(
         self,
         *,
+        channel: str = "primary",
         error: str,
         response_status: int | None = None,
     ) -> None:
         with self._lock:
-            beacon = self._status["beacon"]
+            beacon = self._ensure_control_channel(channel)["beacon"]
             if not beacon["enabled"]:
                 return
             beacon["status"] = "error"
             beacon["last_response_status"] = response_status
             beacon["last_error"] = error
             beacon["consecutive_failures"] += 1
+            self._sync_channel_aliases(channel)
             self._touch()
 
-    def mark_beacon_stopped(self) -> None:
+    def mark_beacon_stopped(self, *, channel: str = "primary") -> None:
         with self._lock:
-            beacon = self._status["beacon"]
+            beacon = self._ensure_control_channel(channel)["beacon"]
             if not beacon["enabled"]:
                 return
             beacon["status"] = "stopped"
+            self._sync_channel_aliases(channel)
             self._touch()
 
     def configure_poller(
         self,
         *,
+        channel: str = "primary",
         enabled: bool,
         target_url: str | None,
         interval_seconds: float | None,
     ) -> None:
         with self._lock:
-            poller = self._status["poller"]
+            control_channel = self._ensure_control_channel(channel)
+            control_channel["base_url"] = target_url
+            poller = control_channel["poller"]
             poller["enabled"] = enabled
             poller["status"] = "idle" if enabled else "disabled"
             poller["target_url"] = target_url if enabled else None
             poller["interval_seconds"] = interval_seconds if enabled else None
             poller["last_error"] = None
+            self._sync_channel_aliases(channel)
             self._touch()
 
-    def mark_polling(self) -> None:
+    def mark_polling(self, *, channel: str = "primary") -> None:
         with self._lock:
-            poller = self._status["poller"]
+            poller = self._ensure_control_channel(channel)["poller"]
             if not poller["enabled"]:
                 return
             poller["status"] = "polling"
             poller["last_poll_at"] = utc_now()
             poller["last_error"] = None
+            self._sync_channel_aliases(channel)
             self._touch()
 
-    def mark_poll_idle(self) -> None:
+    def mark_poll_idle(self, *, channel: str = "primary") -> None:
         with self._lock:
-            poller = self._status["poller"]
+            poller = self._ensure_control_channel(channel)["poller"]
             if not poller["enabled"]:
                 return
             poller["status"] = "idle"
             poller["last_error"] = None
             poller["consecutive_failures"] = 0
+            self._sync_channel_aliases(channel)
             self._touch()
 
-    def mark_task_received(self, *, task_id: str, command: str) -> None:
+    def mark_task_received(self, *, channel: str = "primary", task_id: str, command: str) -> None:
         with self._lock:
-            poller = self._status["poller"]
+            poller = self._ensure_control_channel(channel)["poller"]
             if not poller["enabled"]:
                 return
             poller["status"] = "executing"
@@ -293,11 +326,19 @@ class CameraState:
             poller["last_task_received_at"] = utc_now()
             poller["last_task_result"] = None
             poller["last_error"] = None
+            self._sync_channel_aliases(channel)
             self._touch()
 
-    def mark_task_finished(self, *, task_id: str, command: str, result: dict[str, Any]) -> None:
+    def mark_task_finished(
+        self,
+        *,
+        channel: str = "primary",
+        task_id: str,
+        command: str,
+        result: dict[str, Any],
+    ) -> None:
         with self._lock:
-            poller = self._status["poller"]
+            poller = self._ensure_control_channel(channel)["poller"]
             if not poller["enabled"]:
                 return
             poller["status"] = "idle"
@@ -306,41 +347,46 @@ class CameraState:
             poller["last_task_status"] = "completed" if result.get("success") else "failed"
             poller["last_task_completed_at"] = utc_now()
             poller["last_task_result"] = result
+            self._sync_channel_aliases(channel)
             self._touch()
 
-    def mark_result_reported(self, *, response_status: int) -> None:
+    def mark_result_reported(self, *, channel: str = "primary", response_status: int) -> None:
         with self._lock:
-            poller = self._status["poller"]
+            poller = self._ensure_control_channel(channel)["poller"]
             if not poller["enabled"]:
                 return
             poller["last_result_posted_at"] = utc_now()
             poller["last_result_response_status"] = response_status
             poller["last_error"] = None
             poller["consecutive_failures"] = 0
+            self._sync_channel_aliases(channel)
             self._touch()
 
     def mark_poll_failed(
         self,
         *,
+        channel: str = "primary",
         error: str,
         response_status: int | None = None,
     ) -> None:
         with self._lock:
-            poller = self._status["poller"]
+            poller = self._ensure_control_channel(channel)["poller"]
             if not poller["enabled"]:
                 return
             poller["status"] = "error"
             poller["last_result_response_status"] = response_status
             poller["last_error"] = error
             poller["consecutive_failures"] += 1
+            self._sync_channel_aliases(channel)
             self._touch()
 
-    def mark_poller_stopped(self) -> None:
+    def mark_poller_stopped(self, *, channel: str = "primary") -> None:
         with self._lock:
-            poller = self._status["poller"]
+            poller = self._ensure_control_channel(channel)["poller"]
             if not poller["enabled"]:
                 return
             poller["status"] = "stopped"
+            self._sync_channel_aliases(channel)
             self._touch()
 
     def apply_safe_command(self, command: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -423,3 +469,26 @@ class CameraState:
 
     def _touch(self) -> None:
         self._status["updated_at"] = utc_now()
+
+    def _ensure_control_channel(self, channel: str) -> dict[str, Any]:
+        channels = self._status.setdefault("control_channels", {})
+        if channel not in channels:
+            channels[channel] = {
+                "name": channel,
+                "role": "scenario" if channel != "primary" else "normal-management",
+                "base_url": None,
+                "beacon": default_beacon_state(),
+                "poller": default_poller_state(),
+            }
+        return channels[channel]
+
+    def _sync_primary_aliases(self) -> None:
+        self._sync_channel_aliases("primary")
+
+    def _sync_channel_aliases(self, channel: str) -> None:
+        if channel != "primary":
+            return
+
+        primary = self._ensure_control_channel("primary")
+        self._status["beacon"] = deepcopy(primary["beacon"])
+        self._status["poller"] = deepcopy(primary["poller"])

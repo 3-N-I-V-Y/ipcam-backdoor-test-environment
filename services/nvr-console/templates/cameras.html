@@ -1,0 +1,64 @@
+{% extends "layout.html" %} {% block content %}
+<section class="section-heading">
+  <div>
+    <span class="eyebrow">관리 카메라 전체 목록</span>
+    <h2>관리 카메라 목록</h2>
+    <p>
+      각 카메라는 향후 테스트 시나리오 주입(Injection) 시 기준이 될 수 있도록
+      정상 제어망 주소, RTSP 송출 목적지, 레코더 상태 및 영상 보존
+      주기(Retention Profile) 정보를 자체적으로 유지합니다.
+    </p>
+  </div>
+</section>
+
+<section class="table-card">
+  <div class="table-row table-header">
+    <span>Name</span>
+    <span>Network</span>
+    <span>Stream</span>
+    <span>Stream Details</span>
+    <span>Recording/Command</span>
+    <span>Retention</span>
+  </div>
+
+  {% for camera in cameras %}
+  <a class="table-row table-link" href="/cameras/{{ camera.camera_id }}">
+    <span>
+      <strong>{{ camera.display_name }}</strong>
+      <small>{{ camera.camera_id }}</small>
+    </span>
+    <span>
+      <strong>{{ camera.location }}</strong>
+      <small>{{ camera.vendor }} {{ camera.model }}</small>
+    </span>
+    <span>
+      <span class="badge {{ camera.stream_status }}"
+        >{{ camera.stream_status }}</span
+      >
+      <small>{{ camera.rtsp_url }}</small>
+    </span>
+    <span>
+      <strong>quality={{ camera.runtime.quality }}</strong>
+      <small
+        >overlay={{ camera.runtime.overlay_label }} / source={{
+        camera.runtime.source_kind }}</small
+      >
+    </span>
+    <span>
+      <strong
+        >{{ recorder_state.get(camera.camera_id, {}).get("status", "idle")
+        }}</strong
+      >
+      <small
+        >mode={{ camera.recording_mode }} / poller={{
+        camera.runtime.poller_status }}</small
+      >
+    </span>
+    <span>
+      <strong>{{ camera.retention_days }} days</strong>
+      <small>{{ camera.last_seen_at or "not polled yet" }}</small>
+    </span>
+  </a>
+  {% endfor %}
+</section>
+{% endblock %}
