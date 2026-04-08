@@ -187,6 +187,7 @@ $env:RUN_MODE="local"
 $env:SOURCE_TYPE="webcam"
 $env:WEBCAM_BACKEND="dshow"
 $env:WEBCAM_DEVICE="Integrated Webcam"
+$env:LAB_MODE="beacon,poll"
 powershell -ExecutionPolicy Bypass -File ".\services\camera-app\run-local.ps1"
 ```
 
