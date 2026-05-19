@@ -6,6 +6,7 @@ import logging
 import threading
 from urllib import error, request
 
+from common.scenario_logger import ScenarioLogger
 from state import CameraState
 
 
@@ -24,10 +25,12 @@ class BeaconWorker:
         *,
         config: BeaconConfig,
         state: CameraState,
+        scenario_logger: ScenarioLogger | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._config = config
         self._state = state
+        self._scenario_logger = scenario_logger
         self._logger = logger or logging.getLogger(__name__)
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -86,6 +89,11 @@ class BeaconWorker:
                     channel=self._config.channel_name,
                     response_status=response.status,
                 )
+                self._log_beacon_event(
+                    payload=payload,
+                    result="success",
+                    details={"response_status": response.status},
+                )
         except error.HTTPError as exc:
             message = f"{self._config.channel_name} beacon HTTP error: {exc.code}"
             self._logger.warning(message)
@@ -94,6 +102,11 @@ class BeaconWorker:
                 error=message,
                 response_status=exc.code,
             )
+            self._log_beacon_event(
+                payload=payload,
+                result="failed",
+                details={"error": message, "response_status": exc.code},
+            )
         except error.URLError as exc:
             message = f"{self._config.channel_name} beacon connection error: {exc.reason}"
             self._logger.warning(message)
@@ -101,6 +114,7 @@ class BeaconWorker:
                 channel=self._config.channel_name,
                 error=message,
             )
+            self._log_beacon_event(payload=payload, result="failed", details={"error": message})
         except Exception as exc:
             message = f"{self._config.channel_name} beacon unexpected error: {exc}"
             self._logger.exception(message)
@@ -108,6 +122,7 @@ class BeaconWorker:
                 channel=self._config.channel_name,
                 error=message,
             )
+            self._log_beacon_event(payload=payload, result="failed", details={"error": message})
 
     def _build_payload(self) -> dict:
         snapshot = self._state.snapshot()
@@ -121,3 +136,22 @@ class BeaconWorker:
             "uptime_seconds": snapshot["uptime_seconds"],
             "updated_at": snapshot["updated_at"],
         }
+
+    def _log_beacon_event(self, *, payload: dict, result: str, details: dict) -> None:
+        if not self._scenario_logger:
+            return
+
+        self._scenario_logger.event(
+            event_type="camera.beacon.sent",
+            phase="control_beacon",
+            camera_id=str(payload.get("camera_id") or ""),
+            source=str(payload.get("camera_id") or ""),
+            target=self._config.control_url,
+            result=result,
+            details={
+                "control_channel": self._config.channel_name,
+                "lab_mode": payload.get("lab_mode"),
+                "stream_state": payload.get("stream_state"),
+                **details,
+            },
+        )

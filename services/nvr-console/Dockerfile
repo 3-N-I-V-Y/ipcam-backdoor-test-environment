@@ -8,12 +8,13 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
+COPY services/nvr-console/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-COPY app.py /app/app.py
-COPY templates /app/templates
-COPY static /app/static
+COPY services/nvr-console/app.py /app/app.py
+COPY services/nvr-console/templates /app/templates
+COPY services/nvr-console/static /app/static
+COPY services/common /app/common
 
 EXPOSE 8091
 

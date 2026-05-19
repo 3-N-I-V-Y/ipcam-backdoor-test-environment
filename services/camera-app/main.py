@@ -6,12 +6,18 @@ import logging
 import os
 from pathlib import Path
 import platform
+import sys
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uvicorn
 
+SERVICES_ROOT = Path(__file__).resolve().parents[1]
+if (SERVICES_ROOT / "common").exists():
+    sys.path.insert(0, str(SERVICES_ROOT))
+
 from beacon import BeaconConfig, BeaconWorker
+from common.scenario_logger import ScenarioLogger
 from poller import PollerConfig, TaskPoller
 from source import create_camera_source
 from state import CameraState
@@ -260,6 +266,7 @@ def create_app() -> FastAPI:
         target_url=config.primary_control_url,
         interval_seconds=config.primary_poll_interval_seconds,
     )
+    scenario_logger = ScenarioLogger.from_env(service_name="camera-app")
     streamer = StreamerSupervisor(
         config=StreamerConfig(
             source=source,
@@ -283,6 +290,7 @@ def create_app() -> FastAPI:
             request_timeout_seconds=config.primary_beacon_timeout_seconds,
         ),
         state=state,
+        scenario_logger=scenario_logger,
         logger=logging.getLogger("camera-app.beacon"),
     )
     poller = TaskPoller(
@@ -295,6 +303,7 @@ def create_app() -> FastAPI:
             request_timeout_seconds=config.primary_poll_timeout_seconds,
         ),
         state=state,
+        scenario_logger=scenario_logger,
         logger=logging.getLogger("camera-app.poller"),
     )
 
@@ -308,6 +317,22 @@ def create_app() -> FastAPI:
             config.rtsp_transport,
             config.primary_control_url,
         )
+        scenario_logger.event(
+            event_type="camera.lifecycle.start",
+            phase="startup",
+            camera_id=config.camera_id,
+            source=config.camera_id,
+            target=config.primary_control_url,
+            result="starting",
+            details={
+                "run_mode": config.run_mode,
+                "lab_mode": config.lab_mode,
+                "source_type": config.source_type,
+                "rtsp_url": config.rtsp_url,
+                "primary_beacon_enabled": config.primary_beacon_enabled,
+                "primary_poll_enabled": config.primary_poll_enabled,
+            },
+        )
         streamer.start()
         beacon.start()
         poller.start()
@@ -315,6 +340,15 @@ def create_app() -> FastAPI:
             yield
         finally:
             logger.info("camera-app shutting down")
+            scenario_logger.event(
+                event_type="camera.lifecycle.stop",
+                phase="shutdown",
+                camera_id=config.camera_id,
+                source=config.camera_id,
+                target=config.primary_control_url,
+                result="stopping",
+                details={"lab_mode": config.lab_mode},
+            )
             poller.stop()
             beacon.stop()
             streamer.stop()

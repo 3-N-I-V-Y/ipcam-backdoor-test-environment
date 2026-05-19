@@ -11,6 +11,7 @@ from pathlib import Path
 import secrets
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 from typing import Any
@@ -21,6 +22,12 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
+
+SERVICES_ROOT = Path(__file__).resolve().parents[1]
+if (SERVICES_ROOT / "common").exists():
+    sys.path.insert(0, str(SERVICES_ROOT))
+
+from common.scenario_logger import ScenarioLogger
 
 
 logging.basicConfig(
@@ -121,8 +128,14 @@ class AppConfig:
 
 
 class NvrRepository:
-    def __init__(self, database_path: Path) -> None:
+    def __init__(
+        self,
+        database_path: Path,
+        *,
+        scenario_logger: ScenarioLogger | None = None,
+    ) -> None:
         self._database_path = database_path
+        self._scenario_logger = scenario_logger
         self._lock = threading.RLock()
 
     def _connect(self) -> sqlite3.Connection:
@@ -356,6 +369,21 @@ class NvrRepository:
                 (actor, event_type, target_type, target_id, message, utc_now()),
             )
             connection.commit()
+
+        if self._scenario_logger:
+            self._scenario_logger.event(
+                event_type=f"nvr.audit.{event_type}",
+                phase="nvr_audit",
+                source=actor,
+                target=f"{target_type}:{target_id}",
+                result="recorded",
+                details={
+                    "event_type": event_type,
+                    "target_type": target_type,
+                    "target_id": target_id,
+                    "message": message,
+                },
+            )
 
     def list_audit_events(self, *, limit: int = 50) -> list[dict[str, Any]]:
         with self._lock, self._connect() as connection:
@@ -987,7 +1015,8 @@ def build_task_params(command: str, form_data: dict[str, Any]) -> dict[str, Any]
 
 def create_app() -> FastAPI:
     config = AppConfig.from_env()
-    repository = NvrRepository(config.database_path)
+    scenario_logger = ScenarioLogger.from_env(service_name="nvr-console")
+    repository = NvrRepository(config.database_path, scenario_logger=scenario_logger)
     repository.initialize()
     repository.bootstrap(config)
     session_store = SessionStore(config.session_ttl_seconds)
@@ -1014,12 +1043,31 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         logger.info("starting nvr-console")
+        scenario_logger.event(
+            event_type="nvr.lifecycle.start",
+            phase="startup",
+            source="nvr-console",
+            target=config.default_camera_id,
+            result="starting",
+            details={
+                "database_path": str(config.database_path),
+                "recordings_root": str(config.recordings_root),
+                "control_server_url": config.control_server_url,
+            },
+        )
         poller.start()
         recorder.start()
         try:
             yield
         finally:
             logger.info("stopping nvr-console")
+            scenario_logger.event(
+                event_type="nvr.lifecycle.stop",
+                phase="shutdown",
+                source="nvr-console",
+                target=config.default_camera_id,
+                result="stopping",
+            )
             recorder.stop()
             poller.stop()
 

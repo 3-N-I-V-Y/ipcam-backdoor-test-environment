@@ -1,0 +1,6 @@
+.git
+data/nvr/*
+data/recordings/*
+data/scenarios/*
+**/__pycache__/
+**/*.pyc

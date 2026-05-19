@@ -15,9 +15,18 @@ services:
       retries: 20
 
   control-server:
-    build: ./services/control-server
+    build:
+      context: .
+      dockerfile: services/control-server/Dockerfile
     ports:
       - "8080:8080"
+    environment:
+      SCENARIO_LOG_ENABLED: ${SCENARIO_LOG_ENABLED:-true}
+      SCENARIO_LOG_ROOT: /data/scenarios
+      SCENARIO_ID: ${SCENARIO_ID:-baseline}
+      SCENARIO_RUN_ID: ${SCENARIO_RUN_ID:-manual-run}
+    volumes:
+      - ./data/scenarios:/data/scenarios
     healthcheck:
       test:
         - CMD
@@ -29,7 +38,9 @@ services:
       retries: 20
 
   camera-app:
-    build: ./services/camera-app
+    build:
+      context: .
+      dockerfile: services/camera-app/Dockerfile
     depends_on:
       mediamtx:
         condition: service_healthy
@@ -58,8 +69,13 @@ services:
       PRIMARY_BEACON_TIMEOUT_SECONDS: ${CAMERA_APP_PRIMARY_BEACON_TIMEOUT_SECONDS:-3}
       PRIMARY_POLL_INTERVAL_SECONDS: ${CAMERA_APP_PRIMARY_POLL_INTERVAL_SECONDS:-10}
       PRIMARY_POLL_TIMEOUT_SECONDS: ${CAMERA_APP_PRIMARY_POLL_TIMEOUT_SECONDS:-3}
+      SCENARIO_LOG_ENABLED: ${SCENARIO_LOG_ENABLED:-true}
+      SCENARIO_LOG_ROOT: /data/scenarios
+      SCENARIO_ID: ${SCENARIO_ID:-baseline}
+      SCENARIO_RUN_ID: ${SCENARIO_RUN_ID:-manual-run}
     volumes:
       - ./samples:/samples:ro
+      - ./data/scenarios:/data/scenarios
     healthcheck:
       test:
         - CMD
@@ -71,7 +87,9 @@ services:
       retries: 20
 
   nvr-console:
-    build: ./services/nvr-console
+    build:
+      context: .
+      dockerfile: services/nvr-console/Dockerfile
     depends_on:
       camera-app:
         condition: service_healthy
@@ -98,9 +116,14 @@ services:
       NVR_DEFAULT_RETENTION_DAYS: ${NVR_DEFAULT_RETENTION_DAYS:-7}
       NVR_RECORDING_SEGMENT_SECONDS: ${NVR_RECORDING_SEGMENT_SECONDS:-60}
       NVR_RECORDING_RTSP_TRANSPORT: ${NVR_RECORDING_RTSP_TRANSPORT:-tcp}
+      SCENARIO_LOG_ENABLED: ${SCENARIO_LOG_ENABLED:-true}
+      SCENARIO_LOG_ROOT: /data/scenarios
+      SCENARIO_ID: ${SCENARIO_ID:-baseline}
+      SCENARIO_RUN_ID: ${SCENARIO_RUN_ID:-manual-run}
     volumes:
       - ./data/nvr:/data/nvr
       - ./data/recordings:/data/recordings
+      - ./data/scenarios:/data/scenarios
     healthcheck:
       test:
         - CMD

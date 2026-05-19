@@ -2,5 +2,7 @@ data/nvr/*
 !data/nvr/.gitkeep
 data/recordings/*
 !data/recordings/.gitkeep
+data/scenarios/*
+!data/scenarios/.gitkeep
 services/camera-app/__pycache__/
 services/nvr-console/__pycache__/
