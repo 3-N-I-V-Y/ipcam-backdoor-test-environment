@@ -2,5 +2,9 @@
 data/nvr/*
 data/recordings/*
 data/scenarios/*
+data/pcap/*
+data/zeek/*
+data/flows/*
+data/features/*
 **/__pycache__/
 **/*.pyc
