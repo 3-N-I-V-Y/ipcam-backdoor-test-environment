@@ -4,8 +4,10 @@ from dataclasses import dataclass
 import json
 import logging
 import threading
+from typing import Any
 from urllib import error, parse, request
 
+from common.scenario_logger import ScenarioLogger
 from state import CameraState
 
 
@@ -18,6 +20,8 @@ SAFE_POLL_COMMANDS = {
     "set_quality",
     "toggle_overlay",
 }
+
+SCENARIO_METADATA_FIELDS = ("scenario_id", "run_id", "technique_id", "phase", "label")
 
 
 @dataclass(slots=True)
@@ -36,10 +40,12 @@ class TaskPoller:
         *,
         config: PollerConfig,
         state: CameraState,
+        scenario_logger: ScenarioLogger | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._config = config
         self._state = state
+        self._scenario_logger = scenario_logger
         self._logger = logger or logging.getLogger(__name__)
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -124,11 +130,20 @@ class TaskPoller:
         task_id = str(task.get("id") or "")
         command = str(task.get("command") or "").strip()
         params = task.get("params") if isinstance(task.get("params"), dict) else {}
+        scenario_metadata = self._scenario_metadata(task)
 
         self._state.mark_task_received(
             channel=self._config.channel_name,
             task_id=task_id,
             command=command,
+        )
+        self._log_task_event(
+            event_type="camera.task.received",
+            task_id=task_id,
+            command=command,
+            result="received",
+            scenario_metadata=scenario_metadata,
+            details={"params": params},
         )
 
         if command not in SAFE_POLL_COMMANDS:
@@ -138,6 +153,7 @@ class TaskPoller:
                 task_id=task_id,
                 command=command,
                 params=params,
+                scenario_metadata=scenario_metadata,
                 success=False,
                 output=None,
                 error_message=error_message,
@@ -157,6 +173,7 @@ class TaskPoller:
                 task_id=task_id,
                 command=command,
                 params=params,
+                scenario_metadata=scenario_metadata,
                 success=True,
                 output=output,
                 error_message=None,
@@ -168,6 +185,7 @@ class TaskPoller:
                 task_id=task_id,
                 command=command,
                 params=params,
+                scenario_metadata=scenario_metadata,
                 success=False,
                 output=None,
                 error_message=error_message,
@@ -178,6 +196,20 @@ class TaskPoller:
             task_id=task_id,
             command=command,
             result=result_payload,
+        )
+        self._log_task_event(
+            event_type="camera.task.finished",
+            task_id=task_id,
+            command=command,
+            result="success" if result_payload["success"] else "failed",
+            scenario_metadata=scenario_metadata,
+            details={"error": result_payload.get("error")},
+        )
+        self._log_ground_truth_if_labeled(
+            task_id=task_id,
+            command=command,
+            result="success" if result_payload["success"] else "failed",
+            scenario_metadata=scenario_metadata,
         )
         self._post_result(result_payload)
 
@@ -238,12 +270,13 @@ class TaskPoller:
         task_id: str,
         command: str,
         params: dict,
+        scenario_metadata: dict[str, Any],
         success: bool,
         output: dict | None,
         error_message: str | None,
     ) -> dict:
         snapshot = self._state.snapshot()
-        return {
+        payload = {
             "camera_id": snapshot["camera_id"],
             "control_channel": self._config.channel_name,
             "task_id": task_id,
@@ -256,3 +289,80 @@ class TaskPoller:
             "stream_state": snapshot["stream"]["status"],
             "updated_at": snapshot["updated_at"],
         }
+        payload.update(scenario_metadata)
+        return payload
+
+    def _scenario_metadata(self, task: dict) -> dict[str, Any]:
+        return {
+            field: task[field]
+            for field in SCENARIO_METADATA_FIELDS
+            if task.get(field) is not None and str(task.get(field)).strip()
+        }
+
+    def _log_task_event(
+        self,
+        *,
+        event_type: str,
+        task_id: str,
+        command: str,
+        result: str,
+        scenario_metadata: dict[str, Any],
+        details: dict[str, Any],
+    ) -> None:
+        if not self._scenario_logger:
+            return
+
+        snapshot = self._state.snapshot()
+        self._scenario_logger.event(
+            event_type=event_type,
+            phase=scenario_metadata.get("phase") or "task_execution",
+            label=scenario_metadata.get("label"),
+            scenario_id=scenario_metadata.get("scenario_id"),
+            run_id=scenario_metadata.get("run_id"),
+            technique_id=scenario_metadata.get("technique_id"),
+            camera_id=snapshot["camera_id"],
+            source=snapshot["camera_id"],
+            target=self._config.control_url,
+            result=result,
+            details={
+                "control_channel": self._config.channel_name,
+                "task_id": task_id,
+                "command": command,
+                **details,
+            },
+        )
+
+    def _log_ground_truth_if_labeled(
+        self,
+        *,
+        task_id: str,
+        command: str,
+        result: str,
+        scenario_metadata: dict[str, Any],
+    ) -> None:
+        if not self._scenario_logger:
+            return
+
+        label = scenario_metadata.get("label")
+        phase = scenario_metadata.get("phase")
+        if not label or not phase:
+            return
+
+        snapshot = self._state.snapshot()
+        self._scenario_logger.ground_truth(
+            event_type="camera.task.executed",
+            phase=str(phase),
+            label=str(label),
+            scenario_id=scenario_metadata.get("scenario_id"),
+            run_id=scenario_metadata.get("run_id"),
+            technique_id=scenario_metadata.get("technique_id"),
+            camera_id=snapshot["camera_id"],
+            source=snapshot["camera_id"],
+            target=self._config.control_url,
+            result=result,
+            details={
+                "control_channel": self._config.channel_name,
+                "task_id": task_id,
+                "command": command,
+            },
+        )
