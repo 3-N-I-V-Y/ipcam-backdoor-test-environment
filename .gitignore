@@ -4,5 +4,14 @@ data/recordings/*
 !data/recordings/.gitkeep
 data/scenarios/*
 !data/scenarios/.gitkeep
+data/pcap/*
+!data/pcap/.gitkeep
+data/zeek/*
+!data/zeek/.gitkeep
+data/flows/*
+!data/flows/.gitkeep
+data/features/*
+!data/features/.gitkeep
+**/__pycache__/
 services/camera-app/__pycache__/
 services/nvr-console/__pycache__/
