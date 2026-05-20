@@ -28,7 +28,7 @@ class InfectedScanConfig:
     block_external: bool = True
     max_attempts: int = 0
     phase: str = "low_and_slow_scan"
-    label: str = "attack"
+    label: str = "scanning"
     technique_id: str = "T1046"
 
 

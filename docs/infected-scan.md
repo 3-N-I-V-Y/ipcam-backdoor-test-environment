@@ -70,7 +70,7 @@ Event fields include:
 ```text
 event_type = camera.infected_scan.attempt
 phase = low_and_slow_scan
-label = attack
+label = scanning
 technique_id = T1046
 target
 port
