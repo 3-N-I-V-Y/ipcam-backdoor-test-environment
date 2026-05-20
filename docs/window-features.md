@@ -10,7 +10,7 @@ python3 scripts/build_window_features.py \
   --output "data/features/windowed/${SCENARIO_RUN_ID}.csv" \
   --scenario-id baseline \
   --run-id "${SCENARIO_RUN_ID}" \
-  --window-seconds 300
+  --window-seconds 60
 ```
 
 For attack runs, pass the scenario ground-truth file as well:
@@ -22,7 +22,7 @@ python3 scripts/build_window_features.py \
   --scenario-id infected-recon \
   --run-id "${SCENARIO_RUN_ID}" \
   --ground-truth data/scenarios/ground-truth.jsonl \
-  --window-seconds 300
+  --window-seconds 60
 ```
 
 The script does not write raw `src_ip` or `dst_ip` into the model dataset. It uses

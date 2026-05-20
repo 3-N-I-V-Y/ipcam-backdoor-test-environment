@@ -214,7 +214,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--conn-log", required=True, type=Path, help="Path to Zeek conn.log")
     parser.add_argument("--output", required=True, type=Path, help="Output feature CSV path")
-    parser.add_argument("--window-seconds", type=int, default=300)
+    parser.add_argument("--window-seconds", type=int, default=60)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--scenario-id", default=None)
     parser.add_argument("--default-label", default="normal")
