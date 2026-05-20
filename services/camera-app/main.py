@@ -19,6 +19,7 @@ if (SERVICES_ROOT / "common").exists():
 from beacon import BeaconConfig, BeaconWorker
 from common.scenario_logger import ScenarioLogger
 from poller import PollerConfig, TaskPoller
+from recon import InfectedScanConfig, InfectedScanWorker
 from source import create_camera_source
 from state import CameraState
 from streamer import StreamerConfig, StreamerSupervisor
@@ -69,6 +70,17 @@ class AppConfig:
     primary_beacon_timeout_seconds: float
     primary_poll_interval_seconds: float
     primary_poll_timeout_seconds: float
+    infected_scan_enabled: bool
+    scan_targets: tuple[str, ...]
+    scan_ports: tuple[int, ...]
+    scan_interval_seconds: float
+    scan_timeout_seconds: float
+    scan_startup_delay_seconds: float
+    scan_block_external: bool
+    scan_max_attempts: int
+    scan_phase: str
+    scan_label: str
+    scan_technique_id: str
 
     @classmethod
     def from_env(cls) -> "AppConfig":
@@ -131,6 +143,26 @@ class AppConfig:
                     os.getenv("POLL_TIMEOUT_SECONDS", "3"),
                 )
             ),
+            infected_scan_enabled=parse_env_bool(
+                "SCAN_ENABLED",
+                default=lab_mode_enabled(lab_mode, "infected_scan"),
+            ),
+            scan_targets=parse_csv_env(
+                "SCAN_TARGETS",
+                default=("control-server", "nvr-console", "mediamtx"),
+            ),
+            scan_ports=parse_ports_env(
+                "SCAN_PORTS",
+                default=(22, 23, 80, 443, 554, 8554, 8080, 8090, 8091, 8888),
+            ),
+            scan_interval_seconds=float(os.getenv("SCAN_INTERVAL_SECONDS", "60")),
+            scan_timeout_seconds=float(os.getenv("SCAN_TIMEOUT_SECONDS", "1")),
+            scan_startup_delay_seconds=float(os.getenv("SCAN_STARTUP_DELAY_SECONDS", "10")),
+            scan_block_external=parse_env_bool("SCAN_BLOCK_EXTERNAL", default=True),
+            scan_max_attempts=int(os.getenv("SCAN_MAX_ATTEMPTS", "0")),
+            scan_phase=os.getenv("SCAN_PHASE", "low_and_slow_scan").strip() or "low_and_slow_scan",
+            scan_label=os.getenv("SCAN_LABEL", "attack").strip() or "attack",
+            scan_technique_id=os.getenv("SCAN_TECHNIQUE_ID", "T1046").strip() or "T1046",
         )
 
 
@@ -150,6 +182,10 @@ def normalize_lab_mode(raw_value: str) -> str:
     return ",".join(tokens) if tokens else "none"
 
 
+def lab_mode_enabled(lab_mode: str, token: str) -> bool:
+    return token in {value.strip() for value in lab_mode.split(",") if value.strip()}
+
+
 def parse_env_bool(name: str, *, default: bool) -> bool:
     raw_value = os.getenv(name)
     if raw_value is None or not raw_value.strip():
@@ -161,6 +197,31 @@ def parse_env_bool(name: str, *, default: bool) -> bool:
     if normalized in {"0", "false", "no", "off"}:
         return False
     raise ValueError(f"{name} must be a boolean-like value")
+
+
+def parse_csv_env(name: str, *, default: tuple[str, ...]) -> tuple[str, ...]:
+    raw_value = os.getenv(name)
+    if raw_value is None or not raw_value.strip():
+        return default
+    values = tuple(value.strip() for value in raw_value.split(",") if value.strip())
+    return values or default
+
+
+def parse_ports_env(name: str, *, default: tuple[int, ...]) -> tuple[int, ...]:
+    raw_value = os.getenv(name)
+    if raw_value is None or not raw_value.strip():
+        return default
+
+    ports: list[int] = []
+    for item in raw_value.split(","):
+        value = item.strip()
+        if not value:
+            continue
+        port = int(value)
+        if port < 1 or port > 65535:
+            raise ValueError(f"{name} contains invalid TCP port: {port}")
+        ports.append(port)
+    return tuple(dict.fromkeys(ports)) or default
 
 
 def default_input_source(run_mode: str) -> str:
@@ -306,6 +367,25 @@ def create_app() -> FastAPI:
         scenario_logger=scenario_logger,
         logger=logging.getLogger("camera-app.poller"),
     )
+    infected_scan = InfectedScanWorker(
+        config=InfectedScanConfig(
+            enabled=config.infected_scan_enabled,
+            camera_id=config.camera_id,
+            targets=config.scan_targets,
+            ports=config.scan_ports,
+            interval_seconds=config.scan_interval_seconds,
+            connect_timeout_seconds=config.scan_timeout_seconds,
+            startup_delay_seconds=config.scan_startup_delay_seconds,
+            block_external=config.scan_block_external,
+            max_attempts=config.scan_max_attempts,
+            phase=config.scan_phase,
+            label=config.scan_label,
+            technique_id=config.scan_technique_id,
+        ),
+        state=state,
+        scenario_logger=scenario_logger,
+        logger=logging.getLogger("camera-app.infected_scan"),
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -331,11 +411,13 @@ def create_app() -> FastAPI:
                 "rtsp_url": config.rtsp_url,
                 "primary_beacon_enabled": config.primary_beacon_enabled,
                 "primary_poll_enabled": config.primary_poll_enabled,
+                "infected_scan_enabled": config.infected_scan_enabled,
             },
         )
         streamer.start()
         beacon.start()
         poller.start()
+        infected_scan.start()
         try:
             yield
         finally:
@@ -349,6 +431,7 @@ def create_app() -> FastAPI:
                 result="stopping",
                 details={"lab_mode": config.lab_mode},
             )
+            infected_scan.stop()
             poller.stop()
             beacon.stop()
             streamer.stop()

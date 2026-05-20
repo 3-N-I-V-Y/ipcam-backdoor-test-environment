@@ -49,6 +49,30 @@ def default_poller_state() -> dict[str, Any]:
     }
 
 
+def default_infected_scan_state() -> dict[str, Any]:
+    return {
+        "enabled": False,
+        "status": "disabled",
+        "targets": [],
+        "ports": [],
+        "interval_seconds": None,
+        "connect_timeout_seconds": None,
+        "block_external": True,
+        "last_attempt_at": None,
+        "last_target": None,
+        "last_port": None,
+        "last_result": None,
+        "last_elapsed_ms": None,
+        "last_error": None,
+        "attempt_count": 0,
+        "open_count": 0,
+        "closed_count": 0,
+        "timeout_count": 0,
+        "blocked_count": 0,
+        "error_count": 0,
+    }
+
+
 class CameraState:
     def __init__(
         self,
@@ -104,6 +128,7 @@ class CameraState:
             },
             "beacon": default_beacon_state(),
             "poller": default_poller_state(),
+            "infected_scan": default_infected_scan_state(),
             "markers": deque(maxlen=50),
             "updated_at": utc_now(),
         }
@@ -387,6 +412,78 @@ class CameraState:
                 return
             poller["status"] = "stopped"
             self._sync_channel_aliases(channel)
+            self._touch()
+
+    def configure_infected_scan(
+        self,
+        *,
+        enabled: bool,
+        targets: list[str],
+        ports: list[int],
+        interval_seconds: float,
+        connect_timeout_seconds: float,
+        block_external: bool,
+    ) -> None:
+        with self._lock:
+            scan = self._status["infected_scan"]
+            scan["enabled"] = enabled
+            scan["status"] = "idle" if enabled else "disabled"
+            scan["targets"] = targets
+            scan["ports"] = ports
+            scan["interval_seconds"] = interval_seconds if enabled else None
+            scan["connect_timeout_seconds"] = connect_timeout_seconds if enabled else None
+            scan["block_external"] = block_external
+            scan["last_error"] = None
+            self._touch()
+
+    def mark_infected_scan_attempt(self, *, target: str, port: int) -> None:
+        with self._lock:
+            scan = self._status["infected_scan"]
+            if not scan["enabled"]:
+                return
+            scan["status"] = "scanning"
+            scan["last_attempt_at"] = utc_now()
+            scan["last_target"] = target
+            scan["last_port"] = port
+            scan["last_result"] = None
+            scan["last_elapsed_ms"] = None
+            scan["last_error"] = None
+            self._touch()
+
+    def mark_infected_scan_result(
+        self,
+        *,
+        target: str,
+        port: int,
+        result: str,
+        elapsed_ms: int,
+        error: str | None = None,
+    ) -> None:
+        with self._lock:
+            scan = self._status["infected_scan"]
+            if not scan["enabled"]:
+                return
+            scan["status"] = "idle"
+            scan["last_target"] = target
+            scan["last_port"] = port
+            scan["last_result"] = result
+            scan["last_elapsed_ms"] = elapsed_ms
+            scan["last_error"] = error
+            scan["attempt_count"] += 1
+
+            counter_name = f"{result}_count"
+            if counter_name in scan:
+                scan[counter_name] += 1
+            self._touch()
+
+    def mark_infected_scan_stopped(self, *, error: str | None = None) -> None:
+        with self._lock:
+            scan = self._status["infected_scan"]
+            if not scan["enabled"]:
+                return
+            scan["status"] = "stopped"
+            if error is not None:
+                scan["last_error"] = error
             self._touch()
 
     def apply_safe_command(self, command: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
