@@ -2,7 +2,7 @@
 
 실제 IP 카메라 시스템처럼 보이는 baseline 환경을 먼저 만들고, 그 위에 취약점 시나리오와 NDR 탐지를 얹기 위한 프로젝트입니다.
 
-현재는 `1단계 baseline 구축`과 `정상 관리 채널(primary control channel)`까지 구현된 상태입니다.
+현재는 `infected_scan 랩 모드`와 `baseline 데이터셋과 attack 데이터셋 수집 로직`까지 구현된 상태입니다.
 
 ## 현재 구현 범위
 
