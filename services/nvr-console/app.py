@@ -18,7 +18,7 @@ from typing import Any
 from urllib import error, parse as urlparse, request as urllib_request
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
@@ -82,6 +82,9 @@ class AppConfig:
     recorder_poll_interval_seconds: float
     recording_segment_seconds: int
     recording_rtsp_transport: str
+    live_preview_fps: int
+    live_preview_width: int
+    live_preview_jpeg_quality: int
     ffmpeg_binary: str
     admin_username: str
     admin_password: str
@@ -110,6 +113,9 @@ class AppConfig:
             recorder_poll_interval_seconds=float(os.getenv("NVR_RECORDER_POLL_INTERVAL_SECONDS", "3")),
             recording_segment_seconds=int(os.getenv("NVR_RECORDING_SEGMENT_SECONDS", "60")),
             recording_rtsp_transport=os.getenv("NVR_RECORDING_RTSP_TRANSPORT", "tcp"),
+            live_preview_fps=int(os.getenv("NVR_LIVE_PREVIEW_FPS", "5")),
+            live_preview_width=int(os.getenv("NVR_LIVE_PREVIEW_WIDTH", "960")),
+            live_preview_jpeg_quality=int(os.getenv("NVR_LIVE_PREVIEW_JPEG_QUALITY", "5")),
             ffmpeg_binary=os.getenv("FFMPEG_BIN", "ffmpeg"),
             admin_username=os.getenv("NVR_ADMIN_USERNAME", "admin"),
             admin_password=os.getenv("NVR_ADMIN_PASSWORD", "lab-admin"),
@@ -809,6 +815,88 @@ class RecorderSupervisor:
             self._processes.pop(camera_id, None)
 
 
+def live_mjpeg_stream(*, camera: dict[str, Any], config: AppConfig):
+    boundary = b"nvrframe"
+    scale_filter = f"fps={max(config.live_preview_fps, 1)},scale={max(config.live_preview_width, 160)}:-2"
+    command = [
+        config.ffmpeg_binary,
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-rtsp_transport",
+        config.recording_rtsp_transport,
+        "-i",
+        str(camera["rtsp_url"]),
+        "-an",
+        "-vf",
+        scale_filter,
+        "-q:v",
+        str(max(2, min(config.live_preview_jpeg_quality, 31))),
+        "-f",
+        "image2pipe",
+        "-vcodec",
+        "mjpeg",
+        "pipe:1",
+    ]
+
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            bufsize=0,
+        )
+    except OSError as exc:
+        logger.warning("failed to start live preview for %s: %s", camera.get("camera_id"), exc)
+        return
+
+    if process.stdout is None:
+        process.terminate()
+        return
+
+    buffer = bytearray()
+    try:
+        while True:
+            chunk = process.stdout.read(8192)
+            if not chunk:
+                break
+            buffer.extend(chunk)
+
+            while True:
+                start = buffer.find(b"\xff\xd8")
+                if start < 0:
+                    if len(buffer) > 1024 * 1024:
+                        buffer.clear()
+                    break
+
+                end = buffer.find(b"\xff\xd9", start + 2)
+                if end < 0:
+                    if start > 0:
+                        del buffer[:start]
+                    break
+
+                frame = bytes(buffer[start : end + 2])
+                del buffer[: end + 2]
+                yield (
+                    b"--"
+                    + boundary
+                    + b"\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                    + str(len(frame)).encode("ascii")
+                    + b"\r\n\r\n"
+                    + frame
+                    + b"\r\n"
+                )
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=3)
+
+
 def list_recordings(recordings_root: Path, *, limit: int | None = None) -> list[dict[str, Any]]:
     if not recordings_root.exists():
         return []
@@ -1256,6 +1344,25 @@ def create_app() -> FastAPI:
                 control_state=control_state,
                 control_feedback=request.query_params.get("control_feedback"),
             ),
+        )
+
+    @app.get("/cameras/{camera_id}/live.mjpeg")
+    def camera_live_mjpeg(request: Request, camera_id: str) -> Response:
+        current_user = user_from_request(request, session_store, config.session_cookie_name)
+        if not current_user:
+            return redirect_to_login()
+
+        camera = repository.get_camera(camera_id)
+        if camera is None:
+            return RedirectResponse("/cameras", status_code=303)
+
+        return StreamingResponse(
+            live_mjpeg_stream(camera=camera, config=config),
+            media_type="multipart/x-mixed-replace; boundary=nvrframe",
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+            },
         )
 
     @app.post("/cameras/{camera_id}/settings")

@@ -18,6 +18,21 @@
 <section class="panel-grid">
   <article class="panel wide">
     <div class="panel-heading">
+      <h3>Live View</h3>
+      <span class="chip">MJPEG preview</span>
+    </div>
+    <div class="live-view-shell">
+      <img
+        class="live-view"
+        src="/cameras/{{ camera.camera_id }}/live.mjpeg"
+        alt="Live video preview for {{ camera.display_name }}"
+      />
+    </div>
+    <p class="live-view-meta">RTSP source: {{ camera.rtsp_url }}</p>
+  </article>
+
+  <article class="panel wide">
+    <div class="panel-heading">
       <h3>현재 가동 현황</h3>
     </div>
     <div class="runtime-grid">

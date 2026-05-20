@@ -403,6 +403,31 @@ select {
   color: #cfe9e0;
 }
 
+.live-view-shell {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.34);
+}
+
+.live-view {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #020607;
+}
+
+.live-view-meta {
+  margin: 12px 0 0;
+  word-break: break-all;
+  font-size: 14px;
+}
+
 .empty-state,
 .empty-block {
   padding: 18px;
