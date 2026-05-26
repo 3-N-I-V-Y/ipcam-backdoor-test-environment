@@ -67,6 +67,24 @@ def parse_args() -> argparse.Namespace:
         help="Disable the default attack=scanning mapping.",
     )
     parser.add_argument(
+        "--target-column",
+        default="label",
+        choices=("label", "scan_subtype"),
+        help="Column to summarize and optionally filter for model training.",
+    )
+    parser.add_argument(
+        "--keep-target",
+        action="append",
+        default=[],
+        help="Target value to keep after target mapping. Can be repeated.",
+    )
+    parser.add_argument(
+        "--target-map",
+        action="append",
+        default=[],
+        help="Map target values while merging. Format: old=new.",
+    )
+    parser.add_argument(
         "--skip-feature-build",
         action="store_true",
         help="Merge existing windowed CSVs without regenerating them.",
@@ -85,16 +103,21 @@ def main() -> None:
             build_run_features(args, run_spec)
 
     label_map = parse_label_map(args.label_map, use_default=not args.no_default_label_map)
+    target_map = parse_label_map(args.target_map, use_default=False)
     keep_labels = set(args.keep_label or DEFAULT_KEEP_LABELS)
+    keep_targets = set(args.keep_target)
     rows, fieldnames = merge_rows(
         run_specs=run_specs,
         features_root=args.features_root,
         label_map=label_map,
         keep_labels=keep_labels,
+        target_column=args.target_column,
+        target_map=target_map,
+        keep_targets=keep_targets,
     )
 
     write_csv(args.output, rows, fieldnames)
-    print_summary("merged", rows)
+    print_summary("merged", rows, target_column=args.target_column)
     print(f"wrote {len(rows)} rows to {args.output}")
 
     if args.test_run:
@@ -105,8 +128,8 @@ def main() -> None:
         test_output = args.test_output or args.output.with_name(f"{args.output.stem}-test.csv")
         write_csv(train_output, train_rows, fieldnames)
         write_csv(test_output, test_rows, fieldnames)
-        print_summary("train", train_rows)
-        print_summary("test", test_rows)
+        print_summary("train", train_rows, target_column=args.target_column)
+        print_summary("test", test_rows, target_column=args.target_column)
         print(f"wrote {len(train_rows)} train rows to {train_output}")
         print(f"wrote {len(test_rows)} test rows to {test_output}")
 
@@ -169,6 +192,9 @@ def merge_rows(
     features_root: Path,
     label_map: dict[str, str],
     keep_labels: set[str],
+    target_column: str,
+    target_map: dict[str, str],
+    keep_targets: set[str],
 ) -> tuple[list[dict[str, str]], list[str]]:
     rows: list[dict[str, str]] = []
     fieldnames: list[str] = []
@@ -180,12 +206,29 @@ def merge_rows(
                 continue
             if not fieldnames:
                 fieldnames = list(reader.fieldnames)
+                if target_column not in fieldnames:
+                    fieldnames.append(target_column)
+            else:
+                for fieldname in reader.fieldnames:
+                    if fieldname not in fieldnames:
+                        fieldnames.append(fieldname)
+                if target_column not in fieldnames:
+                    fieldnames.append(target_column)
 
             for row in reader:
                 label = normalize_label(row.get("label", ""), label_map=label_map)
                 if keep_labels and label not in keep_labels:
                     continue
                 row["label"] = label
+
+                target = row.get(target_column, "")
+                if not target:
+                    target = derive_scan_subtype(row)
+                target = normalize_label(target, label_map=target_map)
+                row[target_column] = target
+                if keep_targets and target not in keep_targets:
+                    continue
+
                 rows.append(row)
 
     return rows, fieldnames
@@ -225,6 +268,25 @@ def normalize_label(label: str, *, label_map: dict[str, str]) -> str:
     return label_map.get(value, value)
 
 
+def derive_scan_subtype(row: dict[str, str]) -> str:
+    label = str(row.get("label") or "").strip()
+    if label in {"normal", "benign"}:
+        return "normal"
+
+    phases = [
+        phase.strip()
+        for phase in str(row.get("phases") or "").split(";")
+        if phase.strip()
+    ]
+    if len(phases) == 1:
+        return phases[0]
+    if len(phases) > 1:
+        return "mixed_scan"
+    if label in {"attack", "scanning", "scan"}:
+        return "unknown_scan"
+    return label or "unknown"
+
+
 def write_csv(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as file:
@@ -233,10 +295,13 @@ def write_csv(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) -> 
         writer.writerows(rows)
 
 
-def print_summary(name: str, rows: list[dict[str, str]]) -> None:
+def print_summary(name: str, rows: list[dict[str, str]], *, target_column: str) -> None:
     label_counts = Counter(row.get("label", "") for row in rows)
+    target_counts = Counter(row.get(target_column, "") for row in rows)
     run_counts = Counter(row.get("run_id", "") for row in rows)
     print(f"{name} labels: {dict(sorted(label_counts.items()))}")
+    if target_column != "label":
+        print(f"{name} {target_column}: {dict(sorted(target_counts.items()))}")
     print(f"{name} runs: {dict(sorted(run_counts.items()))}")
 
 

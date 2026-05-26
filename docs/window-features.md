@@ -25,17 +25,32 @@ python3 scripts/build_window_features.py \
   --window-seconds 60
 ```
 
-The script does not write raw `src_ip` or `dst_ip` into the model dataset. It uses
-them only to create behavior features such as `unique_dst_count`.
+The script groups flows by `src_ip + window_start`, but it does not write raw
+`src_ip` or `dst_ip` into the model dataset. Raw addresses are used only during
+aggregation. The output contains `src_entity`, a stable hash for grouping one
+source's windows into sequences.
 
 Important output columns:
 
 ```text
+src_entity
+scan_subtype
 flow_count
 unique_dst_count
 unique_dst_port_count
+top_dst_port_ratio
 dst_port_entropy
 proto_entropy
+service_entropy
+unique_service_count
+empty_service_ratio
+conn_state_entropy
+failed_conn_ratio
+s0_ratio
+rej_ratio
+rst_ratio
+established_conn_ratio
+syn_only_ratio
 short_flow_ratio
 small_response_ratio
 zero_dst_bytes_ratio
