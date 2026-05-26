@@ -1,0 +1,22 @@
+Starting Nmap 7.98 ( https://nmap.org ) at 2026-05-26 07:59 +0000
+Nmap scan report for nvr-console (172.18.0.5)
+Host is up (0.000085s latency).
+
+PORT     STATE  SERVICE
+22/tcp   closed ssh
+80/tcp   closed http
+8091/tcp open   jamlink
+
+Nmap done: 1 IP address (1 host up) scanned in 0.52 seconds
+
+[stderr]
+Unable to find image 'instrumentisto/nmap:latest' locally
+latest: Pulling from instrumentisto/nmap
+78140f3b72aa: Pulling fs layer
+1f90445fda13: Pulling fs layer
+1f90445fda13: Download complete
+1f90445fda13: Pull complete
+78140f3b72aa: Download complete
+78140f3b72aa: Pull complete
+Digest: sha256:96f6ed194519b62421a1a1c57809e65a7f94d2aa1c8c25676f247e5e148c0827
+Status: Downloaded newer image for instrumentisto/nmap:latest

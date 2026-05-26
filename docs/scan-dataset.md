@@ -28,6 +28,45 @@ scanning
 For compatibility with older `infected_scan` runs, `attack` labels are mapped to
 `scanning` by default.
 
+## Build a Scan Subtype Dataset
+
+Use `scan_subtype` as the model target when training the multi-class subtype
+baseline:
+
+```bash
+python3 scripts/build_scan_dataset.py \
+  --zeek-root data/zeek \
+  --features-root data/features/windowed \
+  --ground-truth data/scenarios/ground-truth.jsonl \
+  --target-column scan_subtype \
+  --output data/features/datasets/ipcam-scan-subtype-60s.csv \
+  --window-seconds 60
+```
+
+`scan_subtype` is derived as:
+
+```text
+normal label -> normal
+scan label with one phase -> phase, e.g. low_and_slow_scan
+scan label with multiple phases -> mixed_scan
+scan label with no phase -> unknown_scan
+```
+
+For run-based train/test files:
+
+```bash
+python3 scripts/build_scan_dataset.py \
+  --run baseline-002:baseline:normal \
+  --run baseline-003:baseline:normal \
+  --run infected-scan-001:infected-scan:normal \
+  --run infected-scan-002:infected-scan:normal \
+  --test-run baseline-003 \
+  --test-run infected-scan-002 \
+  --target-column scan_subtype \
+  --output data/features/datasets/ipcam-scan-subtype-60s.csv \
+  --window-seconds 60
+```
+
 ## Explicit Runs
 
 ```bash

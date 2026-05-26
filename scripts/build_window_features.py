@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import csv
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import hashlib
 import json
 import math
 import os
@@ -29,20 +31,36 @@ DEFAULT_TSV_FIELDS = [
     "resp_ip_bytes",
 ]
 
+FAILED_CONN_STATES = {"S0", "REJ", "RSTO", "RSTR", "RSTOS0", "SH", "SHR"}
+ESTABLISHED_CONN_STATES = {"SF", "S1", "S2", "S3"}
+
 
 OUTPUT_FIELDS = [
     "window_start",
     "window_end",
+    "src_entity",
     "scenario_id",
     "run_id",
     "label",
+    "scan_subtype",
     "phases",
     "technique_ids",
     "flow_count",
     "unique_dst_count",
     "unique_dst_port_count",
+    "top_dst_port_ratio",
     "dst_port_entropy",
     "proto_entropy",
+    "service_entropy",
+    "unique_service_count",
+    "empty_service_ratio",
+    "conn_state_entropy",
+    "failed_conn_ratio",
+    "s0_ratio",
+    "rej_ratio",
+    "rst_ratio",
+    "established_conn_ratio",
+    "syn_only_ratio",
     "short_flow_ratio",
     "small_response_ratio",
     "zero_dst_bytes_ratio",
@@ -77,6 +95,9 @@ class Flow:
     dst_pkts: int
     dst_ip_bytes: int
     proto: str
+    service: str
+    conn_state: str
+    history: str
     src_ip: str
     dst_ip: str
 
@@ -90,6 +111,11 @@ class GroundTruthEvent:
     run_id: str | None = None
     phase: str | None = None
     technique_id: str | None = None
+    source: str | None = None
+    target: str | None = None
+    port: int | None = None
+    proto: str | None = None
+    result: str | None = None
 
 
 @dataclass(slots=True)
@@ -102,6 +128,9 @@ class WindowStats:
     dst_ips: set[str] = field(default_factory=set)
     dst_ports: list[int] = field(default_factory=list)
     protos: list[str] = field(default_factory=list)
+    services: list[str] = field(default_factory=list)
+    conn_states: list[str] = field(default_factory=list)
+    histories: list[str] = field(default_factory=list)
     durations: list[float] = field(default_factory=list)
     src_bytes: list[int] = field(default_factory=list)
     dst_bytes: list[int] = field(default_factory=list)
@@ -113,6 +142,13 @@ class WindowStats:
     zero_dst_bytes_count: int = 0
     tcp_count: int = 0
     udp_count: int = 0
+    empty_service_count: int = 0
+    failed_conn_count: int = 0
+    s0_count: int = 0
+    rej_count: int = 0
+    rst_count: int = 0
+    established_conn_count: int = 0
+    syn_only_count: int = 0
     dst_port_well_known_count: int = 0
     dst_port_registered_count: int = 0
     dst_port_ephemeral_count: int = 0
@@ -126,6 +162,12 @@ class WindowStats:
         self.dst_ips.add(flow.dst_ip)
         self.dst_ports.append(flow.dst_port)
         self.protos.append(flow.proto)
+        service = clean_zeek_value(flow.service)
+        conn_state = clean_zeek_value(flow.conn_state).upper()
+        history = clean_zeek_value(flow.history)
+        self.services.append(service or "none")
+        self.conn_states.append(conn_state or "unknown")
+        self.histories.append(history or "none")
         self.durations.append(flow.duration)
         self.src_bytes.append(flow.src_bytes)
         self.dst_bytes.append(flow.dst_bytes)
@@ -146,6 +188,22 @@ class WindowStats:
         elif proto == "udp":
             self.udp_count += 1
 
+        if not service:
+            self.empty_service_count += 1
+
+        if conn_state in FAILED_CONN_STATES:
+            self.failed_conn_count += 1
+        if conn_state == "S0":
+            self.s0_count += 1
+        if conn_state == "REJ":
+            self.rej_count += 1
+        if "RST" in conn_state or "R" in history.upper():
+            self.rst_count += 1
+        if conn_state in ESTABLISHED_CONN_STATES:
+            self.established_conn_count += 1
+        if is_syn_only_history(history):
+            self.syn_only_count += 1
+
         if flow.dst_port < 1024:
             self.dst_port_well_known_count += 1
         elif flow.dst_port < 49152:
@@ -156,9 +214,11 @@ class WindowStats:
     def to_row(
         self,
         *,
+        src_entity: str,
         scenario_id: str,
         run_id: str,
         label: str,
+        scan_subtype: str,
         phases: set[str],
         technique_ids: set[str],
     ) -> dict[str, Any]:
@@ -168,20 +228,34 @@ class WindowStats:
         total_dst_pkts = sum(self.dst_pkts)
         total_bytes = [src + dst for src, dst in zip(self.src_bytes, self.dst_bytes)]
         inter_flow_times = deltas(sorted(self.timestamps))
+        top_dst_port_ratio = top_value_ratio(self.dst_ports)
 
         return {
             "window_start": iso_utc(self.start_ts),
             "window_end": iso_utc(self.end_ts),
+            "src_entity": src_entity,
             "scenario_id": scenario_id,
             "run_id": run_id,
             "label": label,
+            "scan_subtype": scan_subtype,
             "phases": join_values(phases),
             "technique_ids": join_values(technique_ids),
             "flow_count": self.flow_count,
             "unique_dst_count": len(self.dst_ips),
             "unique_dst_port_count": len(set(self.dst_ports)),
+            "top_dst_port_ratio": rounded(top_dst_port_ratio),
             "dst_port_entropy": rounded(entropy(self.dst_ports)),
             "proto_entropy": rounded(entropy(self.protos)),
+            "service_entropy": rounded(entropy(self.services)),
+            "unique_service_count": len({service for service in self.services if service != "none"}),
+            "empty_service_ratio": rounded(ratio(self.empty_service_count, self.flow_count)),
+            "conn_state_entropy": rounded(entropy(self.conn_states)),
+            "failed_conn_ratio": rounded(ratio(self.failed_conn_count, self.flow_count)),
+            "s0_ratio": rounded(ratio(self.s0_count, self.flow_count)),
+            "rej_ratio": rounded(ratio(self.rej_count, self.flow_count)),
+            "rst_ratio": rounded(ratio(self.rst_count, self.flow_count)),
+            "established_conn_ratio": rounded(ratio(self.established_conn_count, self.flow_count)),
+            "syn_only_ratio": rounded(ratio(self.syn_only_count, self.flow_count)),
             "short_flow_ratio": rounded(ratio(self.short_flow_count, self.flow_count)),
             "small_response_ratio": rounded(ratio(self.small_response_count, self.flow_count)),
             "zero_dst_bytes_ratio": rounded(ratio(self.zero_dst_bytes_count, self.flow_count)),
@@ -248,8 +322,10 @@ def main() -> None:
     with args.output.open("w", encoding="utf-8", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=OUTPUT_FIELDS)
         writer.writeheader()
-        for window in sorted(windows.values(), key=lambda item: item.start_ts):
-            label, phases, technique_ids, selected_scenario_id = label_for_window(
+        for (src_ip, _), window in sorted(
+            windows.items(), key=lambda item: (item[1].start_ts, item[0][0])
+        ):
+            label, scan_subtype, phases, technique_ids, selected_scenario_id = label_for_window(
                 window,
                 truth_events=truth_events,
                 default_label=args.default_label,
@@ -257,9 +333,11 @@ def main() -> None:
             )
             writer.writerow(
                 window.to_row(
+                    src_entity=entity_id_for(run_id=run_id, src_ip=src_ip),
                     scenario_id=selected_scenario_id,
                     run_id=run_id,
                     label=label,
+                    scan_subtype=scan_subtype,
                     phases=phases,
                     technique_ids=technique_ids,
                 )
@@ -311,6 +389,9 @@ def flow_from_row(row: dict[str, str]) -> Flow | None:
         src_port=to_int(get_value(row, "id.orig_p", "src_port")),
         dst_port=to_int(get_value(row, "id.resp_p", "dst_port")),
         proto=(get_value(row, "proto") or "unknown").lower(),
+        service=get_value(row, "service") or "-",
+        conn_state=get_value(row, "conn_state") or "-",
+        history=get_value(row, "history") or "-",
         duration=to_float(get_value(row, "duration")),
         src_bytes=to_int(get_value(row, "orig_bytes", "src_bytes")),
         dst_bytes=to_int(get_value(row, "resp_bytes", "dst_bytes")),
@@ -329,15 +410,16 @@ def build_windows(
     short_flow_seconds: float,
     small_response_bytes: int,
     include_empty: bool,
-) -> dict[float, WindowStats]:
-    windows: dict[float, WindowStats] = {}
+) -> dict[tuple[str, float], WindowStats]:
+    windows: dict[tuple[str, float], WindowStats] = {}
     if not flows:
         return windows
 
     for flow in flows:
         start_ts = math.floor(flow.ts / window_seconds) * window_seconds
+        key = (flow.src_ip, start_ts)
         window = windows.setdefault(
-            start_ts,
+            key,
             WindowStats(
                 start_ts=start_ts,
                 window_seconds=window_seconds,
@@ -348,20 +430,27 @@ def build_windows(
         window.add(flow)
 
     if include_empty:
-        first_start = min(windows)
-        last_start = max(windows)
-        current = first_start
-        while current <= last_start:
-            windows.setdefault(
-                current,
-                WindowStats(
-                    start_ts=current,
-                    window_seconds=window_seconds,
-                    short_flow_seconds=short_flow_seconds,
-                    small_response_bytes=small_response_bytes,
-                ),
-            )
-            current += window_seconds
+        ranges: dict[str, tuple[float, float]] = {}
+        for src_ip, start_ts in windows:
+            if src_ip not in ranges:
+                ranges[src_ip] = (start_ts, start_ts)
+                continue
+            first_start, last_start = ranges[src_ip]
+            ranges[src_ip] = (min(first_start, start_ts), max(last_start, start_ts))
+
+        for src_ip, (first_start, last_start) in ranges.items():
+            current = first_start
+            while current <= last_start:
+                windows.setdefault(
+                    (src_ip, current),
+                    WindowStats(
+                        start_ts=current,
+                        window_seconds=window_seconds,
+                        short_flow_seconds=short_flow_seconds,
+                        small_response_bytes=small_response_bytes,
+                    ),
+                )
+                current += window_seconds
 
     return windows
 
@@ -402,6 +491,11 @@ def load_ground_truth(path: Path, *, run_id: str) -> list[GroundTruthEvent]:
                     run_id=payload_run_id or None,
                     phase=str(payload.get("phase") or "") or None,
                     technique_id=str(payload.get("technique_id") or "") or None,
+                    source=str(payload.get("source") or "") or None,
+                    target=str(payload.get("target") or "") or None,
+                    port=optional_int(payload.get("port")),
+                    proto=str(payload.get("proto") or "") or None,
+                    result=str(payload.get("result") or "") or None,
                 )
             )
     return events
@@ -413,14 +507,14 @@ def label_for_window(
     truth_events: list[GroundTruthEvent],
     default_label: str,
     default_scenario_id: str,
-) -> tuple[str, set[str], set[str], str]:
+) -> tuple[str, str, set[str], set[str], str]:
     matches = [
         event
         for event in truth_events
-        if intervals_overlap(window.start_ts, window.end_ts, event.start_ts, event.end_ts)
+        if window_matches_event(window, event)
     ]
     if not matches:
-        return default_label, set(), set(), default_scenario_id
+        return default_label, subtype_for_label(default_label, set()), set(), set(), default_scenario_id
 
     labels = {event.label for event in matches if event.label}
     phases = {event.phase for event in matches if event.phase}
@@ -434,7 +528,32 @@ def label_for_window(
     else:
         label = join_values(labels)
 
-    return label, phases, technique_ids, scenario_ids[0] if scenario_ids else default_scenario_id
+    scan_subtype = subtype_for_label(label, phases)
+
+    return label, scan_subtype, phases, technique_ids, scenario_ids[0] if scenario_ids else default_scenario_id
+
+
+def window_matches_event(window: WindowStats, event: GroundTruthEvent) -> bool:
+    if not intervals_overlap(window.start_ts, window.end_ts, event.start_ts, event.end_ts):
+        return False
+    if event.port is not None and event.port not in window.dst_ports:
+        return False
+    if event.proto and event.proto.lower() not in {proto.lower() for proto in window.protos}:
+        return False
+    return True
+
+
+def subtype_for_label(label: str, phases: set[str]) -> str:
+    normalized_label = clean_zeek_value(label).lower()
+    if normalized_label in {"normal", "benign"}:
+        return "normal"
+    if len(phases) == 1:
+        return next(iter(phases))
+    if len(phases) > 1:
+        return "mixed_scan"
+    if normalized_label in {"attack", "scanning", "scan"}:
+        return "unknown_scan"
+    return normalized_label or "unknown"
 
 
 def intervals_overlap(left_start: float, left_end: float, right_start: float, right_end: float) -> bool:
@@ -473,6 +592,18 @@ def get_value(row: dict[str, str], *names: str) -> str:
     return ""
 
 
+def optional_int(raw_value: Any) -> int | None:
+    if raw_value is None:
+        return None
+    value = str(raw_value).strip()
+    if not value or value == "-":
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return int(float(value))
+
+
 def to_int(raw_value: str | None) -> int:
     if raw_value is None:
         return 0
@@ -498,6 +629,28 @@ def looks_like_header(parts: list[str]) -> bool:
     if not parts:
         return False
     return parts[0] in {"ts", "timestamp"}
+
+
+def clean_zeek_value(raw_value: str | None) -> str:
+    if raw_value is None:
+        return ""
+    value = raw_value.strip()
+    if not value or value == "-":
+        return ""
+    return value
+
+
+def is_syn_only_history(history: str) -> bool:
+    value = clean_zeek_value(history)
+    if not value:
+        return False
+    return "S" in value and not any(marker in value for marker in "hHaAdDfFrR")
+
+
+def top_value_ratio(values: list[Any]) -> float:
+    if not values:
+        return 0.0
+    return Counter(values).most_common(1)[0][1] / len(values)
 
 
 def entropy(values: list[Any]) -> float:
@@ -549,6 +702,11 @@ def iso_utc(timestamp: float) -> str:
 
 def join_values(values: set[str]) -> str:
     return ";".join(sorted(value for value in values if value))
+
+
+def entity_id_for(*, run_id: str, src_ip: str) -> str:
+    digest = hashlib.sha256(f"{run_id}:{src_ip}".encode("utf-8")).hexdigest()[:16]
+    return f"src_{digest}"
 
 
 def infer_run_id(path: Path) -> str:
