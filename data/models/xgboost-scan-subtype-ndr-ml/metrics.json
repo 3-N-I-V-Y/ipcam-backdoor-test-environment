@@ -1,0 +1,122 @@
+{
+  "accuracy": 0.642276,
+  "best_iteration": 134,
+  "class_counts_test": {
+    "horizontal_scan": 18,
+    "low_and_slow_scan": 8,
+    "normal": 70,
+    "service_probe": 14,
+    "udp_scan": 4,
+    "vertical_scan": 9
+  },
+  "class_counts_train": {
+    "horizontal_scan": 1,
+    "low_and_slow_scan": 125,
+    "normal": 804,
+    "service_probe": 12,
+    "udp_scan": 4,
+    "vertical_scan": 2
+  },
+  "classes": [
+    "normal",
+    "horizontal_scan",
+    "low_and_slow_scan",
+    "service_probe",
+    "udp_scan",
+    "vertical_scan"
+  ],
+  "confusion_matrix": [
+    [
+      70,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      17,
+      0,
+      1,
+      0,
+      0,
+      0
+    ],
+    [
+      6,
+      0,
+      2,
+      0,
+      0,
+      0
+    ],
+    [
+      10,
+      0,
+      0,
+      4,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      1,
+      3,
+      0
+    ],
+    [
+      9,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  ],
+  "feature_count": 33,
+  "macro_f1": 0.401844,
+  "normal_false_positive_rate": 0.0,
+  "per_class": {
+    "horizontal_scan": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 18
+    },
+    "low_and_slow_scan": {
+      "f1": 0.363636,
+      "precision": 0.666667,
+      "recall": 0.25,
+      "support": 8
+    },
+    "normal": {
+      "f1": 0.769231,
+      "precision": 0.625,
+      "recall": 1.0,
+      "support": 70
+    },
+    "service_probe": {
+      "f1": 0.421053,
+      "precision": 0.8,
+      "recall": 0.285714,
+      "support": 14
+    },
+    "udp_scan": {
+      "f1": 0.857143,
+      "precision": 1.0,
+      "recall": 0.75,
+      "support": 4
+    },
+    "vertical_scan": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 9
+    }
+  },
+  "scan_recall": 0.207547,
+  "test_rows": 123,
+  "train_rows": 948
+}

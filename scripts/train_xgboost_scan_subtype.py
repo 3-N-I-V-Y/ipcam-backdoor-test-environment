@@ -108,7 +108,7 @@ def main() -> None:
 
     probabilities = model.predict(dtest)
     predictions = probabilities.argmax(axis=1)
-    metrics = compute_metrics(y_test.tolist(), predictions.tolist(), classes)
+    metrics = compute_metrics(y_test, predictions.tolist(), classes)
     metrics.update(
         {
             "train_rows": len(train_rows),
