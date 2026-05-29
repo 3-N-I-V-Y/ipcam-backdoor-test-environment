@@ -1,0 +1,14 @@
+{
+  "classes": [
+    "normal",
+    "low_and_slow_scan",
+    "service_probe",
+    "udp_scan"
+  ],
+  "label_to_index": {
+    "low_and_slow_scan": 1,
+    "normal": 0,
+    "service_probe": 2,
+    "udp_scan": 3
+  }
+}

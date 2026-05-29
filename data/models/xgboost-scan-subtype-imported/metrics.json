@@ -1,0 +1,78 @@
+{
+  "accuracy": 0.704918,
+  "best_iteration": 42,
+  "class_counts_test": {
+    "normal": 43,
+    "service_probe": 18
+  },
+  "class_counts_train": {
+    "low_and_slow_scan": 125,
+    "normal": 807,
+    "service_probe": 12,
+    "udp_scan": 4
+  },
+  "classes": [
+    "normal",
+    "low_and_slow_scan",
+    "service_probe",
+    "udp_scan"
+  ],
+  "confusion_matrix": [
+    [
+      43,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      17,
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0
+    ]
+  ],
+  "feature_count": 33,
+  "macro_f1": 0.208738,
+  "normal_false_positive_rate": 0.0,
+  "per_class": {
+    "low_and_slow_scan": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    },
+    "normal": {
+      "f1": 0.834951,
+      "precision": 0.716667,
+      "recall": 1.0,
+      "support": 43
+    },
+    "service_probe": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 18
+    },
+    "udp_scan": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    }
+  },
+  "scan_recall": 0.055556,
+  "test_rows": 61,
+  "train_rows": 948
+}
