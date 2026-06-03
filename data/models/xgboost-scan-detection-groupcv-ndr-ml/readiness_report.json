@@ -1,0 +1,203 @@
+{
+  "checks": [
+    {
+      "details": {
+        "feature_count": 22
+      },
+      "name": "feature_schema_present",
+      "passed": true
+    },
+    {
+      "details": {
+        "leaked_features": []
+      },
+      "name": "no_leakage_or_identity_features",
+      "passed": true
+    },
+    {
+      "details": {
+        "actual": 0.7450980392156863,
+        "required": 0.9
+      },
+      "name": "metric_precision_gate",
+      "passed": false
+    },
+    {
+      "details": {
+        "actual": 0.5786802030456852,
+        "required": 0.9
+      },
+      "name": "metric_recall_gate",
+      "passed": false
+    },
+    {
+      "details": {
+        "actual": 0.6514285714285715,
+        "required": 0.9
+      },
+      "name": "metric_f1_gate",
+      "passed": false
+    },
+    {
+      "details": {
+        "actual": 0.8736801449662559,
+        "required": 0.95
+      },
+      "name": "metric_roc_auc_gate",
+      "passed": false
+    },
+    {
+      "details": {
+        "actual": 0.04462242562929062,
+        "required": 0.05
+      },
+      "name": "metric_false_positive_rate_gate",
+      "passed": true
+    },
+    {
+      "details": {
+        "fn": 83,
+        "fp": 39,
+        "tn": 835,
+        "tp": 114
+      },
+      "name": "confusion_matrix_present",
+      "passed": true
+    },
+    {
+      "details": {
+        "actual": 1071,
+        "required": 500
+      },
+      "name": "train_row_volume_gate",
+      "passed": true
+    },
+    {
+      "details": {
+        "actual": 1071,
+        "required": 200
+      },
+      "name": "test_row_volume_gate",
+      "passed": true
+    },
+    {
+      "details": {
+        "is_insufficient": true,
+        "total_samples": 1071
+      },
+      "name": "data_sufficiency_report_available",
+      "passed": true
+    },
+    {
+      "details": {
+        "modes": [
+          "real+synthetic",
+          "real-only",
+          "synthetic-only"
+        ]
+      },
+      "name": "source_separated_evaluation_available",
+      "passed": true
+    },
+    {
+      "details": {
+        "group_count": 22,
+        "n_splits": 5,
+        "rows": 1071
+      },
+      "name": "group_cv_evaluation_available",
+      "passed": true
+    },
+    {
+      "details": {
+        "group_overlap_between_train_and_test": false
+      },
+      "name": "group_cv_no_group_overlap",
+      "passed": true
+    },
+    {
+      "details": {
+        "raw_identity_features": []
+      },
+      "name": "group_cv_no_raw_identity_features",
+      "passed": true
+    },
+    {
+      "details": {
+        "bundle_feature_count": 22,
+        "extra_in_group_cv": [],
+        "group_cv_feature_count": 22,
+        "missing_from_group_cv": [],
+        "same_order": true
+      },
+      "name": "group_cv_feature_schema_matches_bundle",
+      "passed": true
+    },
+    {
+      "details": {
+        "min_train_rows_per_fold": 816,
+        "out_of_fold_rows": 1071,
+        "required_oof_rows": 200,
+        "required_train_rows": 500
+      },
+      "name": "group_cv_volume_gate",
+      "passed": true
+    },
+    {
+      "details": {
+        "actual": 0.7450980392156863,
+        "required": 0.9
+      },
+      "name": "group_cv_metric_precision_gate",
+      "passed": false
+    },
+    {
+      "details": {
+        "actual": 0.5786802030456852,
+        "required": 0.9
+      },
+      "name": "group_cv_metric_recall_gate",
+      "passed": false
+    },
+    {
+      "details": {
+        "actual": 0.6514285714285715,
+        "required": 0.9
+      },
+      "name": "group_cv_metric_f1_gate",
+      "passed": false
+    },
+    {
+      "details": {
+        "actual": 0.8736801449662559,
+        "required": 0.95
+      },
+      "name": "group_cv_metric_roc_auc_gate",
+      "passed": false
+    },
+    {
+      "details": {
+        "actual": 0.04462242562929062,
+        "required": 0.05
+      },
+      "name": "group_cv_false_positive_rate_gate",
+      "passed": true
+    }
+  ],
+  "gates": {
+    "max_false_positive_rate": 0.05,
+    "min_f1_score": 0.9,
+    "min_precision": 0.9,
+    "min_recall": 0.9,
+    "min_roc_auc": 0.95,
+    "min_test_rows_for_operational_claim": 200,
+    "min_train_rows_for_operational_claim": 500
+  },
+  "lab_integration_ready": false,
+  "notes": [
+    "Lab integration means the model bundle has usable artifacts, stable feature schema, and real-test metrics above gates.",
+    "Operational ready additionally requires stronger train/test volume, source-separated real/synthetic evaluation evidence, and group-separated real-only evaluation when available.",
+    "Synthetic data must not be used to inflate final real-only performance claims."
+  ],
+  "operational_ready": false
+}

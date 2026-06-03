@@ -1,0 +1,107 @@
+{
+  "run_prefix": "seq10s-24h",
+  "window_seconds": 10,
+  "sequence_lengths": [
+    12,
+    24
+  ],
+  "expected_active_src_entities": 2,
+  "stride": 1,
+  "target_column": "scan_subtype",
+  "compose_up": true,
+  "compose_service": "camera-app",
+  "skip_pull": true,
+  "skip_existing": true,
+  "data_root": "data",
+  "scenario_log_root": "data/scenarios/seq10s-24h",
+  "dataset_output": "data/features/datasets/seq10s-24h-scan-subtype-10s.csv",
+  "sequence_root": "data/features/sequences",
+  "state_path": "data/features/sequences/seq10s-24h-state.json",
+  "plan_output_json": "data/features/datasets/seq10s-24h-sequence-plan.json",
+  "plan_output_md": "data/features/datasets/seq10s-24h-sequence-plan.md",
+  "report_output_json": "data/features/sequences/seq10s-24h-sequence-report.json",
+  "report_output_md": "data/features/sequences/seq10s-24h-sequence-report.md",
+  "capture_network_mode": "host",
+  "capture_interface": "any",
+  "capture_filter": "tcp or (udp and not port 8000 and not port 8001)",
+  "min_free_disk_gb": 20,
+  "test_repeats": [
+    9,
+    10
+  ],
+  "baseline": {
+    "repeats": 10,
+    "seconds": 1200
+  },
+  "attacks": [
+    {
+      "scenario_id": "vertical-scan",
+      "scan_type": "vertical",
+      "targets": "nvr-console",
+      "ports": "22,23,80,443,554,8554,8080,8090,8091,8888",
+      "repeats": 10,
+      "duration_seconds": 1200,
+      "interval_seconds": 20,
+      "max_scan_repeats": 0,
+      "long_capture": true
+    },
+    {
+      "scenario_id": "horizontal-scan",
+      "scan_type": "horizontal",
+      "targets": "control-server,nvr-console,mediamtx,camera-app",
+      "ports": "80",
+      "repeats": 10,
+      "duration_seconds": 1200,
+      "interval_seconds": 20,
+      "max_scan_repeats": 0,
+      "long_capture": true
+    },
+    {
+      "scenario_id": "service-probe",
+      "scan_type": "service-probe",
+      "targets": "control-server,nvr-console,mediamtx,camera-app",
+      "ports": "80,8080,8090,8091,8554,8888",
+      "repeats": 10,
+      "duration_seconds": 1200,
+      "interval_seconds": 20,
+      "max_scan_repeats": 0,
+      "long_capture": true
+    },
+    {
+      "scenario_id": "udp-scan",
+      "scan_type": "udp",
+      "targets": "mediamtx,control-server,nvr-console",
+      "ports": "53,123,161,1900,5353",
+      "repeats": 10,
+      "duration_seconds": 1200,
+      "interval_seconds": 20,
+      "max_scan_repeats": 0,
+      "long_capture": true
+    },
+    {
+      "scenario_id": "low-and-slow",
+      "scan_type": "low-and-slow",
+      "targets": "control-server,nvr-console,mediamtx",
+      "ports": "22,23,80,443,554,8554,8080,8090,8091,8888",
+      "repeats": 10,
+      "duration_seconds": 0,
+      "interval_seconds": 60,
+      "max_scan_repeats": 0,
+      "long_capture": false
+    }
+  ],
+  "training": {
+    "enabled": false,
+    "rnn_type": "gru",
+    "output_root": "data/models",
+    "epochs": 30,
+    "batch_size": 32,
+    "hidden_size": 64,
+    "num_layers": 1,
+    "dropout": 0.1,
+    "lr": 0.001,
+    "weight_decay": 0.0001,
+    "class_weight": "balanced",
+    "device": "auto"
+  }
+}

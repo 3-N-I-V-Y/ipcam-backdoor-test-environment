@@ -61,6 +61,161 @@ def format_bytes(size: int) -> str:
     return f"{size} B"
 
 
+def parse_iso_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+
+    raw_value = value.strip()
+    if raw_value.endswith("Z"):
+        raw_value = f"{raw_value[:-1]}+00:00"
+
+    try:
+        parsed = datetime.fromisoformat(raw_value)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def format_age_label(age_seconds: float | None) -> str:
+    if age_seconds is None:
+        return "never"
+
+    age_seconds = max(0, int(age_seconds))
+    if age_seconds < 5:
+        return "just now"
+    if age_seconds < 60:
+        return f"{age_seconds}s ago"
+
+    minutes, seconds = divmod(age_seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {seconds:02d}s ago"
+
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes:02d}m ago"
+
+
+def sort_by_timestamp_desc(items: list[dict[str, Any]], timestamp_key: str) -> list[dict[str, Any]]:
+    return sorted(
+        items,
+        key=lambda item: parse_iso_timestamp(item.get(timestamp_key)) or datetime.min.replace(tzinfo=UTC),
+        reverse=True,
+    )
+
+
+def fragment_safe_id(value: str) -> str:
+    cleaned = "".join(
+        char if char.isascii() and (char.isalnum() or char in {"-", "_"}) else "-"
+        for char in value
+    ).strip("-")
+    return cleaned or "device"
+
+
+def summarize_camera_health(
+    beacons: list[dict[str, Any]],
+    *,
+    camera_ids: list[str],
+    heartbeat_ttl_seconds: float,
+) -> dict[str, Any]:
+    now = datetime.now(UTC)
+    latest_by_camera: dict[str, tuple[datetime, dict[str, Any]]] = {}
+    for beacon in beacons:
+        camera_id = str(beacon.get("camera_id") or "").strip()
+        received_at = parse_iso_timestamp(beacon.get("received_at"))
+        if not camera_id or received_at is None:
+            continue
+
+        existing = latest_by_camera.get(camera_id)
+        if existing is None or received_at > existing[0]:
+            latest_by_camera[camera_id] = (received_at, beacon)
+
+    tracked_camera_ids = [str(camera_id) for camera_id in camera_ids if str(camera_id).strip()]
+    if not tracked_camera_ids:
+        tracked_camera_ids = sorted(latest_by_camera)
+
+    cameras: list[dict[str, Any]] = []
+    for camera_id in tracked_camera_ids:
+        latest = latest_by_camera.get(camera_id)
+        received_at = latest[0] if latest else None
+        age_seconds = (now - received_at).total_seconds() if received_at else None
+        alive = age_seconds is not None and age_seconds <= heartbeat_ttl_seconds
+        cameras.append(
+            {
+                "camera_id": camera_id,
+                "status": "alive" if alive else "offline",
+                "label": "Alive" if alive else "Offline",
+                "alive": alive,
+                "last_beacon_at": received_at.isoformat() if received_at else None,
+                "last_beacon_age_seconds": age_seconds,
+                "last_beacon_age_label": format_age_label(age_seconds),
+            }
+        )
+
+    alive_count = sum(1 for camera in cameras if camera["alive"])
+    total_count = len(cameras)
+    if total_count == 0:
+        status = "unknown"
+        label = "Unknown"
+        hint = "no cameras registered"
+    elif alive_count == total_count:
+        status = "alive"
+        label = "Alive"
+        hint = (
+            f"last beacon {cameras[0]['last_beacon_age_label']}"
+            if total_count == 1
+            else f"{alive_count}/{total_count} cameras alive"
+        )
+    elif alive_count > 0:
+        status = "degraded"
+        label = "Degraded"
+        hint = f"{alive_count}/{total_count} cameras alive"
+    else:
+        status = "offline"
+        label = "Offline"
+        hint = (
+            f"last beacon {cameras[0]['last_beacon_age_label']}"
+            if total_count == 1
+            else "no recent camera heartbeat"
+        )
+
+    return {
+        "status": status,
+        "label": label,
+        "hint": hint,
+        "alive_count": alive_count,
+        "total_count": total_count,
+        "cameras": cameras,
+    }
+
+
+def attach_camera_health_details(
+    control_overview: dict[str, Any],
+    cameras: list[dict[str, Any]],
+) -> dict[str, Any]:
+    camera_lookup = {str(camera.get("camera_id")): camera for camera in cameras}
+    camera_health: list[dict[str, Any]] = []
+    for health in control_overview.get("camera_health", []):
+        camera_id = str(health.get("camera_id") or "")
+        camera = camera_lookup.get(camera_id, {})
+        enriched = dict(health)
+        enriched["display_name"] = camera.get("display_name") or camera_id
+        enriched["location"] = camera.get("location") or ""
+        enriched["stream_status"] = camera.get("stream_status") or "unknown"
+        enriched["recording_mode"] = camera.get("recording_mode") or "unknown"
+        enriched["rtsp_url"] = camera.get("rtsp_url") or ""
+        enriched["status_url"] = camera.get("status_url") or ""
+        enriched["fragment_id"] = f"device-{fragment_safe_id(camera_id)}"
+        enriched["status_href"] = f"/devices/status#device-{fragment_safe_id(camera_id)}"
+        enriched["detail_href"] = f"/cameras/{urlparse.quote(camera_id, safe='')}"
+        camera_health.append(enriched)
+
+    enriched_overview = dict(control_overview)
+    enriched_overview["camera_health"] = camera_health
+    return enriched_overview
+
+
 def parse_recording_start(file_name: str) -> str | None:
     stem = Path(file_name).stem
     try:
@@ -99,6 +254,7 @@ class AppConfig:
     default_camera_hls_url: str
     default_retention_days: int
     control_server_url: str
+    camera_heartbeat_ttl_seconds: float
 
     @classmethod
     def from_env(cls) -> "AppConfig":
@@ -130,6 +286,7 @@ class AppConfig:
             default_camera_hls_url=os.getenv("NVR_CAMERA_HLS_URL", "http://localhost:8888/cam1/index.m3u8"),
             default_retention_days=int(os.getenv("NVR_DEFAULT_RETENTION_DAYS", "7")),
             control_server_url=os.getenv("NVR_CONTROL_SERVER_URL", "http://control-server:8080"),
+            camera_heartbeat_ttl_seconds=float(os.getenv("NVR_CAMERA_HEARTBEAT_TTL_SECONDS", "30")),
         )
 
 
@@ -481,9 +638,9 @@ class ControlServerClient:
         return self._post_json("/tasks", payload)
 
     def get_camera_control_state(self, camera_id: str) -> dict[str, Any]:
-        beacons = self.list_beacons(camera_id=camera_id)
+        beacons = sort_by_timestamp_desc(self.list_beacons(camera_id=camera_id), "received_at")
         tasks = self.list_tasks(camera_id=camera_id)
-        results = self.list_results(camera_id=camera_id)
+        results = sort_by_timestamp_desc(self.list_results(camera_id=camera_id), "received_at")
         return {
             "healthy": True,
             "error": None,
@@ -494,15 +651,15 @@ class ControlServerClient:
             "last_result": results[0] if results else None,
         }
 
-    def get_overview(self, camera_ids: list[str]) -> dict[str, Any]:
-        beacons = self.list_beacons()
+    def get_overview(self, camera_ids: list[str], *, heartbeat_ttl_seconds: float) -> dict[str, Any]:
+        beacons = sort_by_timestamp_desc(self.list_beacons(), "received_at")
         tasks = self.list_tasks()
-        results = self.list_results()
-        active_cameras = {
-            item.get("camera_id")
-            for item in beacons[:20]
-            if item.get("camera_id") in camera_ids
-        }
+        results = sort_by_timestamp_desc(self.list_results(), "received_at")
+        camera_health = summarize_camera_health(
+            beacons,
+            camera_ids=camera_ids,
+            heartbeat_ttl_seconds=heartbeat_ttl_seconds,
+        )
         return {
             "healthy": True,
             "error": None,
@@ -511,7 +668,12 @@ class ControlServerClient:
             "pending_tasks_count": len(tasks),
             "recent_beacons_count": len(beacons),
             "recent_results_count": len(results),
-            "active_camera_count": len(active_cameras),
+            "active_camera_count": camera_health["alive_count"],
+            "camera_health": camera_health["cameras"],
+            "channel_status": camera_health["status"],
+            "channel_status_label": camera_health["label"],
+            "channel_status_hint": camera_health["hint"],
+            "heartbeat_ttl_seconds": heartbeat_ttl_seconds,
         }
 
     def _get_json(self, path: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -1045,10 +1207,20 @@ def template_context(
     return context
 
 
-def safe_control_overview(control_client: ControlServerClient, camera_ids: list[str]) -> dict[str, Any]:
+def safe_control_overview(
+    control_client: ControlServerClient,
+    camera_ids: list[str],
+    *,
+    heartbeat_ttl_seconds: float,
+) -> dict[str, Any]:
     try:
-        return control_client.get_overview(camera_ids)
+        return control_client.get_overview(camera_ids, heartbeat_ttl_seconds=heartbeat_ttl_seconds)
     except Exception as exc:
+        camera_health = summarize_camera_health(
+            [],
+            camera_ids=camera_ids,
+            heartbeat_ttl_seconds=heartbeat_ttl_seconds,
+        )
         return {
             "healthy": False,
             "error": str(exc),
@@ -1058,6 +1230,11 @@ def safe_control_overview(control_client: ControlServerClient, camera_ids: list[
             "recent_beacons_count": 0,
             "recent_results_count": 0,
             "active_camera_count": 0,
+            "camera_health": camera_health["cameras"],
+            "channel_status": "offline",
+            "channel_status_label": "Offline",
+            "channel_status_hint": "control server unavailable",
+            "heartbeat_ttl_seconds": heartbeat_ttl_seconds,
         }
 
 
@@ -1175,7 +1352,11 @@ def create_app() -> FastAPI:
     @app.get("/health")
     def health() -> dict[str, Any]:
         summary = recordings_summary(config.recordings_root)
-        control_status = safe_control_overview(control_client, [])
+        control_status = safe_control_overview(
+            control_client,
+            [],
+            heartbeat_ttl_seconds=config.camera_heartbeat_ttl_seconds,
+        )
         return {
             "status": "ok",
             "cameras": len(repository.list_cameras()),
@@ -1268,16 +1449,18 @@ def create_app() -> FastAPI:
         control_overview = safe_control_overview(
             control_client,
             [str(camera["camera_id"]) for camera in cameras],
+            heartbeat_ttl_seconds=config.camera_heartbeat_ttl_seconds,
         )
+        control_overview = attach_camera_health_details(control_overview, cameras)
         online_count = sum(1 for camera in cameras if camera["stream_status"] in {"starting", "publishing"})
         stats = [
             {"label": "연동된 카메라", "value": len(cameras), "hint": "등록된 IP 장비"},
             {"label": "정상 송출 채널", "value": online_count, "hint": "🟢송출중"},
             {"label": "녹화 세그먼트", "value": recordings["count"], "hint": recordings["total_size_human"]},
             {
-                "label": "상태 보고 신호",
-                "value": control_overview["recent_beacons_count"],
-                "hint": "제어 통신 정상",
+                "label": "기기 상태",
+                "value": control_overview["channel_status_label"],
+                "hint": control_overview["channel_status_hint"],
             },
         ]
 
@@ -1312,6 +1495,31 @@ def create_app() -> FastAPI:
                 active_nav="cameras",
                 cameras=[enrich_camera_record(camera) for camera in repository.list_cameras()],
                 recorder_state=recorder.snapshot(),
+            ),
+        )
+
+    @app.get("/devices/status", response_class=HTMLResponse)
+    def device_status_page(request: Request) -> Response:
+        current_user = user_from_request(request, session_store, config.session_cookie_name)
+        if not current_user:
+            return redirect_to_login()
+
+        cameras = [enrich_camera_record(camera) for camera in repository.list_cameras()]
+        control_overview = safe_control_overview(
+            control_client,
+            [str(camera["camera_id"]) for camera in cameras],
+            heartbeat_ttl_seconds=config.camera_heartbeat_ttl_seconds,
+        )
+        control_overview = attach_camera_health_details(control_overview, cameras)
+        return templates.TemplateResponse(
+            "device_status.html",
+            template_context(
+                request=request,
+                current_user=current_user,
+                page_title="Device Status",
+                active_nav="devices",
+                control_overview=control_overview,
+                cameras=cameras,
             ),
         )
 
@@ -1461,7 +1669,9 @@ def create_app() -> FastAPI:
         control_overview = safe_control_overview(
             control_client,
             [str(camera["camera_id"]) for camera in cameras],
+            heartbeat_ttl_seconds=config.camera_heartbeat_ttl_seconds,
         )
+        control_overview = attach_camera_health_details(control_overview, cameras)
         return templates.TemplateResponse(
             "control.html",
             template_context(
@@ -1553,7 +1763,9 @@ def create_app() -> FastAPI:
         payload = safe_control_overview(
             control_client,
             [str(camera["camera_id"]) for camera in cameras],
+            heartbeat_ttl_seconds=config.camera_heartbeat_ttl_seconds,
         )
+        payload = attach_camera_health_details(payload, cameras)
         return JSONResponse(payload)
 
     return app

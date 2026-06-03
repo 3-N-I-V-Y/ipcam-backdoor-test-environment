@@ -257,11 +257,27 @@ a {
   align-items: center;
 }
 
+.list-link {
+  color: inherit;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.list-link:hover,
+.list-link:focus-visible,
+.list-row:target {
+  border-color: rgba(240, 193, 109, 0.4);
+  background: rgba(240, 193, 109, 0.08);
+}
+
 .status-stack {
   display: grid;
   justify-items: end;
   gap: 4px;
   text-align: right;
+}
+
+.status-stack a {
+  color: var(--accent);
 }
 
 .badge,
@@ -278,7 +294,8 @@ a {
   font-size: 13px;
 }
 
-.badge.publishing {
+.badge.publishing,
+.badge.alive {
   color: var(--green);
   border-color: rgba(115, 208, 162, 0.35);
   background: rgba(115, 208, 162, 0.1);
@@ -286,7 +303,8 @@ a {
 
 .badge.starting,
 .badge.retrying,
-.badge.restarting {
+.badge.restarting,
+.badge.degraded {
   color: var(--amber);
   border-color: rgba(240, 193, 109, 0.35);
   background: rgba(240, 193, 109, 0.1);

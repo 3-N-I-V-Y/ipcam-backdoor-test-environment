@@ -109,6 +109,7 @@ def main() -> None:
     rows, fieldnames = merge_rows(
         run_specs=run_specs,
         features_root=args.features_root,
+        window_seconds=args.window_seconds,
         label_map=label_map,
         keep_labels=keep_labels,
         target_column=args.target_column,
@@ -190,6 +191,7 @@ def merge_rows(
     *,
     run_specs: list[RunSpec],
     features_root: Path,
+    window_seconds: int,
     label_map: dict[str, str],
     keep_labels: set[str],
     target_column: str,
@@ -199,7 +201,7 @@ def merge_rows(
     rows: list[dict[str, str]] = []
     fieldnames: list[str] = []
 
-    for feature_path in feature_paths(run_specs, features_root):
+    for feature_path in feature_paths(run_specs, features_root, window_seconds=window_seconds):
         with feature_path.open("r", encoding="utf-8", newline="") as file:
             reader = csv.DictReader(file)
             if reader.fieldnames is None:
@@ -234,18 +236,22 @@ def merge_rows(
     return rows, fieldnames
 
 
-def feature_paths(run_specs: list[RunSpec], features_root: Path) -> list[Path]:
+def feature_paths(
+    run_specs: list[RunSpec], features_root: Path, *, window_seconds: int
+) -> list[Path]:
     paths: list[Path] = []
     for run_spec in run_specs:
-        matches = sorted(features_root.glob(f"{run_spec.run_id}-*s.csv"))
-        if not matches:
-            matches = [features_root / f"{run_spec.run_id}.csv"]
-        for path in matches:
-            if path.exists():
-                paths.append(path)
-                break
-        else:
-            raise SystemExit(f"missing window feature CSV for {run_spec.run_id} under {features_root}")
+        path = features_root / f"{run_spec.run_id}-{window_seconds}s.csv"
+        if not path.exists():
+            legacy_path = features_root / f"{run_spec.run_id}.csv"
+            if legacy_path.exists():
+                path = legacy_path
+            else:
+                raise SystemExit(
+                    f"missing {window_seconds}s window feature CSV for {run_spec.run_id} "
+                    f"under {features_root}"
+                )
+        paths.append(path)
     return paths
 
 

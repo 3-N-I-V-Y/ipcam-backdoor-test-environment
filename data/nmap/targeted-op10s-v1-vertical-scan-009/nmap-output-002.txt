@@ -1,0 +1,17 @@
+Starting Nmap 7.98 ( https://nmap.org ) at 2026-06-02 15:37 +0000
+Nmap scan report for nvr-console (172.18.0.5)
+Host is up (0.00023s latency).
+
+PORT     STATE  SERVICE
+22/tcp   closed ssh
+23/tcp   closed telnet
+80/tcp   closed http
+443/tcp  closed https
+554/tcp  closed rtsp
+8080/tcp closed http-proxy
+8090/tcp closed opsmessaging
+8091/tcp open   jamlink
+8554/tcp closed rtsp-alt
+8888/tcp closed sun-answerbook
+
+Nmap done: 1 IP address (1 host up) scanned in 0.52 seconds

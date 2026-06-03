@@ -18,6 +18,14 @@ EXCLUDE_COLUMNS = {
     "scan_subtype",
     "phases",
     "technique_ids",
+    "phase",
+    "technique_id",
+    "is_synthetic",
+    "data_source",
+    "src_ip",
+    "dst_ip",
+    "id.orig_h",
+    "id.resp_h",
 }
 
 

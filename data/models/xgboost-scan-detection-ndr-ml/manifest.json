@@ -1,0 +1,288 @@
+{
+  "artifact_sha256": {
+    "feature_names.json": "1670f9c739bfd37ec57f5fb20166fbeab45afef75c7161caf30e0c10db773efe",
+    "metrics.json": "986ea396e8290754184a089673caf04198f2f677961ada5373e57e238670c205",
+    "model.json": "6e7f86744eb5c15282dab6797912e070f6ca7ecdb111d178fa9d262be92af862",
+    "model.pkl": "635804143fc57f5ec4e1418eff2379c7238ad52557ae6ac9e1904fb48cad91da",
+    "predict_xgb_scan_detection.py": "9fbc47d13eaad4c0ae5a29574532d20169e353e128dfc97182916a9e4e0c1a8d"
+  },
+  "bundle_dir": "/home/tkwk9731/workspace/ipcam-backdoor-test-environment/data/models/xgboost-scan-detection-ndr-ml",
+  "bundle_name": "xgboost-scan-detection-ndr-ml",
+  "created_at": "2026-06-02T17:28:43.261607+00:00",
+  "feature_columns": [
+    "flow_count",
+    "unique_dst_count",
+    "unique_dst_port_count",
+    "top_dst_port_ratio",
+    "dst_port_entropy",
+    "proto_entropy",
+    "service_entropy",
+    "unique_service_count",
+    "empty_service_ratio",
+    "conn_state_entropy",
+    "failed_conn_ratio",
+    "s0_ratio",
+    "rej_ratio",
+    "rst_ratio",
+    "established_conn_ratio",
+    "syn_only_ratio",
+    "short_flow_ratio",
+    "small_response_ratio",
+    "zero_dst_bytes_ratio",
+    "avg_duration",
+    "median_duration",
+    "avg_src_bytes",
+    "avg_dst_bytes",
+    "avg_total_bytes",
+    "bytes_out_in_ratio",
+    "pkts_out_in_ratio",
+    "inter_flow_time_mean",
+    "inter_flow_time_std",
+    "tcp_flow_ratio",
+    "udp_flow_ratio",
+    "dst_port_well_known_ratio",
+    "dst_port_registered_ratio",
+    "dst_port_ephemeral_ratio",
+    "rolling_3_flow_count_sum",
+    "rolling_3_unique_dst_count",
+    "rolling_3_unique_dst_port_count",
+    "rolling_3_failed_conn_ratio",
+    "rolling_3_rej_ratio",
+    "rolling_3_s0_ratio",
+    "rolling_3_short_flow_ratio",
+    "rolling_3_zero_dst_bytes_ratio",
+    "rolling_3_dst_port_entropy",
+    "rolling_3_avg_duration",
+    "rolling_3_avg_total_bytes",
+    "rolling_6_flow_count_sum",
+    "rolling_6_unique_dst_count",
+    "rolling_6_unique_dst_port_count",
+    "rolling_6_failed_conn_ratio",
+    "rolling_6_rej_ratio",
+    "rolling_6_s0_ratio",
+    "rolling_6_short_flow_ratio",
+    "rolling_6_zero_dst_bytes_ratio",
+    "rolling_6_dst_port_entropy",
+    "rolling_6_avg_duration",
+    "rolling_6_avg_total_bytes"
+  ],
+  "feature_count": 55,
+  "label_map": {
+    "normal": 0,
+    "scanning": 1
+  },
+  "model_type": "xgboost_binary_scan_detection",
+  "prediction_threshold": 0.8,
+  "readiness": {
+    "checks": [
+      {
+        "details": {
+          "feature_count": 55
+        },
+        "name": "feature_schema_present",
+        "passed": true
+      },
+      {
+        "details": {
+          "leaked_features": []
+        },
+        "name": "no_leakage_or_identity_features",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 1.0,
+          "required": 0.9
+        },
+        "name": "metric_precision_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 0.9947368421052631,
+          "required": 0.9
+        },
+        "name": "metric_recall_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 0.9973614775725593,
+          "required": 0.9
+        },
+        "name": "metric_f1_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 0.9999877600979192,
+          "required": 0.95
+        },
+        "name": "metric_roc_auc_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 0.0,
+          "required": 0.05
+        },
+        "name": "metric_false_positive_rate_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "fn": 2,
+          "fp": 0,
+          "tn": 645,
+          "tp": 378
+        },
+        "name": "confusion_matrix_present",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 1025,
+          "required": 500
+        },
+        "name": "train_row_volume_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 1025,
+          "required": 200
+        },
+        "name": "test_row_volume_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "is_insufficient": true,
+          "total_samples": 1025
+        },
+        "name": "data_sufficiency_report_available",
+        "passed": true
+      },
+      {
+        "details": {
+          "modes": [
+            "real+synthetic",
+            "real-only",
+            "synthetic-only"
+          ]
+        },
+        "name": "source_separated_evaluation_available",
+        "passed": true
+      },
+      {
+        "details": {
+          "group_count": 70,
+          "n_splits": 5,
+          "rows": 1025
+        },
+        "name": "group_cv_evaluation_available",
+        "passed": true
+      },
+      {
+        "details": {
+          "group_overlap_between_train_and_test": false
+        },
+        "name": "group_cv_no_group_overlap",
+        "passed": true
+      },
+      {
+        "details": {
+          "raw_identity_features": []
+        },
+        "name": "group_cv_no_raw_identity_features",
+        "passed": true
+      },
+      {
+        "details": {
+          "bundle_feature_count": 55,
+          "extra_in_group_cv": [],
+          "group_cv_feature_count": 55,
+          "missing_from_group_cv": [],
+          "same_order": true
+        },
+        "name": "group_cv_feature_schema_matches_bundle",
+        "passed": true
+      },
+      {
+        "details": {
+          "min_train_rows_per_fold": 817,
+          "out_of_fold_rows": 1025,
+          "required_oof_rows": 200,
+          "required_train_rows": 500
+        },
+        "name": "group_cv_volume_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 1.0,
+          "required": 0.9
+        },
+        "name": "group_cv_metric_precision_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 0.9947368421052631,
+          "required": 0.9
+        },
+        "name": "group_cv_metric_recall_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 0.9973614775725593,
+          "required": 0.9
+        },
+        "name": "group_cv_metric_f1_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 0.9999877600979192,
+          "required": 0.95
+        },
+        "name": "group_cv_metric_roc_auc_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 0.0,
+          "required": 0.05
+        },
+        "name": "group_cv_false_positive_rate_gate",
+        "passed": true
+      }
+    ],
+    "gates": {
+      "max_false_positive_rate": 0.05,
+      "min_f1_score": 0.9,
+      "min_precision": 0.9,
+      "min_recall": 0.9,
+      "min_roc_auc": 0.95,
+      "min_test_rows_for_operational_claim": 200,
+      "min_train_rows_for_operational_claim": 500
+    },
+    "lab_integration_ready": true,
+    "notes": [
+      "Lab integration means the model bundle has usable artifacts, stable feature schema, and real-test metrics above gates.",
+      "Operational ready additionally requires stronger train/test volume, source-separated real/synthetic evaluation evidence, and group-separated real-only evaluation when available.",
+      "Synthetic data must not be used to inflate final real-only performance claims."
+    ],
+    "operational_ready": true
+  },
+  "source_artifacts": {
+    "data_report": "models/data_sufficiency_report.json",
+    "feature_names": "/home/tkwk9731/workspace/ndr-ml/models/group_cv_evaluation/final_feature_names.json",
+    "group_cv_evaluation": "models/group_cv_evaluation/group_cv_report.json",
+    "metrics": "/home/tkwk9731/workspace/ndr-ml/models/group_cv_evaluation/final_model_metrics.json",
+    "model_json": "/home/tkwk9731/workspace/ndr-ml/models/group_cv_evaluation/final_model.json",
+    "model_pkl": "/home/tkwk9731/workspace/ndr-ml/models/group_cv_evaluation/final_model.pkl",
+    "source_evaluation": "models/source_evaluations/source_evaluation_report.json"
+  }
+}

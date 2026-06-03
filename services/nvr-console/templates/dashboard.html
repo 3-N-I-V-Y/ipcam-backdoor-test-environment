@@ -81,23 +81,44 @@
 
   <article class="panel wide">
     <div class="panel-heading">
-      <h3>채널 상태 현황</h3>
-      <a href="/control">상태 모니터링</a>
+      <h3>기기 상태</h3>
+      <a href="/devices/status">전체 기기 상태</a>
     </div>
-    {% if control_overview.healthy %}
+    {% if not control_overview.healthy %}
+    <p class="empty-state">
+      Control server unavailable: {{ control_overview.error }}
+    </p>
+    {% endif %}
     <div class="list">
       <div class="list-row">
         <div>
-          <strong>Recent beacons</strong>
-          <p>카메라 생존 신호 및 상태 동기화 활동 모니터링</p>
+          <strong>연결 상태 요약</strong>
+          <p>최근 비콘 수신 시각 기준 health 체크</p>
         </div>
         <div class="status-stack">
-          <span>{{ control_overview.recent_beacons_count }}</span>
-          <small
-            >{{ control_overview.active_camera_count }} active cameras</small
+          <span class="badge {{ control_overview.channel_status }}"
+            >{{ control_overview.channel_status_label }}</span
           >
+          <small>{{ control_overview.channel_status_hint }}</small>
         </div>
       </div>
+      {% for camera_health in control_overview.camera_health %}
+      <a class="list-row list-link" href="{{ camera_health.status_href }}">
+        <div>
+          <strong>{{ camera_health.display_name }}</strong>
+          <p>
+            {{ camera_health.camera_id }}{% if camera_health.location %} / {{
+            camera_health.location }}{% endif %}
+          </p>
+        </div>
+        <div class="status-stack">
+          <span class="badge {{ camera_health.status }}"
+            >{{ camera_health.label }}</span
+          >
+          <small>last beacon {{ camera_health.last_beacon_age_label }}</small>
+        </div>
+      </a>
+      {% endfor %}
       <div class="list-row">
         <div>
           <strong>대기 중인 작업</strong>
@@ -111,11 +132,6 @@
         </div>
       </div>
     </div>
-    {% else %}
-    <p class="empty-state">
-      Control server unavailable: {{ control_overview.error }}
-    </p>
-    {% endif %}
   </article>
 
   <article class="panel wide">

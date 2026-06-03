@@ -1,0 +1,26 @@
+Starting Nmap 7.98 ( https://nmap.org ) at 2026-06-02 15:50 +0000
+Nmap scan report for control-server (172.18.0.3)
+Host is up (0.00020s latency).
+
+PORT   STATE  SERVICE
+80/tcp closed http
+
+Nmap scan report for nvr-console (172.18.0.5)
+Host is up (0.000086s latency).
+
+PORT   STATE  SERVICE
+80/tcp closed http
+
+Nmap scan report for mediamtx (172.18.0.2)
+Host is up (0.000016s latency).
+
+PORT   STATE  SERVICE
+80/tcp closed http
+
+Nmap scan report for camera-app (172.18.0.4)
+Host is up (0.00018s latency).
+
+PORT   STATE  SERVICE
+80/tcp closed http
+
+Nmap done: 4 IP addresses (4 hosts up) scanned in 2.03 seconds

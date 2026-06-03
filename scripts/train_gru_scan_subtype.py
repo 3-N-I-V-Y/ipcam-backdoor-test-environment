@@ -9,8 +9,9 @@ from typing import Any
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Train a GRU classifier on window feature sequences.",
+        description="Train a GRU or LSTM classifier on window feature sequences.",
     )
+    parser.add_argument("--rnn-type", choices=("gru", "lstm"), default="gru")
     parser.add_argument("--train", required=True, type=Path, help="Training NPZ from build_gru_sequences.py")
     parser.add_argument("--test", required=True, type=Path, help="Test NPZ from build_gru_sequences.py")
     parser.add_argument(
@@ -38,7 +39,7 @@ def main() -> None:
         import torch
     except ImportError as exc:
         raise SystemExit(
-            "missing GRU dependency. Install the ML requirements first, for example: "
+            "missing RNN dependency. Install the ML requirements first, for example: "
             "pip install -r requirements-ml.txt"
         ) from exc
 
@@ -68,6 +69,7 @@ def main() -> None:
     device = resolve_device(torch, args.device)
     model = build_model(
         torch,
+        rnn_type=args.rnn_type,
         input_size=x_train.shape[2],
         hidden_size=args.hidden_size,
         num_layers=args.num_layers,
@@ -117,6 +119,7 @@ def main() -> None:
     metrics = compute_metrics(y_test.tolist(), predictions, classes)
     metrics.update(
         {
+            "rnn_type": args.rnn_type,
             "train_sequences": int(x_train.shape[0]),
             "test_sequences": int(x_test.shape[0]),
             "sequence_length": int(x_train.shape[1]),
@@ -138,6 +141,7 @@ def main() -> None:
             "output_size": len(classes),
             "classes": classes,
             "feature_columns": feature_columns,
+            "rnn_type": args.rnn_type,
         },
         args.output_dir / "model.pt",
     )
@@ -146,6 +150,7 @@ def main() -> None:
         {
             "classes": classes,
             "feature_columns": feature_columns,
+            "rnn_type": args.rnn_type,
             "hidden_size": args.hidden_size,
             "num_layers": args.num_layers,
             "dropout": args.dropout,
@@ -178,16 +183,18 @@ def resolve_device(torch: Any, requested: str) -> Any:
 def build_model(
     torch: Any,
     *,
+    rnn_type: str,
     input_size: int,
     hidden_size: int,
     num_layers: int,
     dropout: float,
     output_size: int,
 ) -> Any:
-    class GRUClassifier(torch.nn.Module):
+    class RNNClassifier(torch.nn.Module):
         def __init__(self) -> None:
             super().__init__()
-            self.gru = torch.nn.GRU(
+            rnn_cls = torch.nn.GRU if rnn_type == "gru" else torch.nn.LSTM
+            self.rnn = rnn_cls(
                 input_size=input_size,
                 hidden_size=hidden_size,
                 num_layers=num_layers,
@@ -197,10 +204,12 @@ def build_model(
             self.classifier = torch.nn.Linear(hidden_size, output_size)
 
         def forward(self, values: Any) -> Any:
-            _, hidden = self.gru(values)
+            _, hidden = self.rnn(values)
+            if isinstance(hidden, tuple):
+                hidden = hidden[0]
             return self.classifier(hidden[-1])
 
-    return GRUClassifier()
+    return RNNClassifier()
 
 
 def feature_stats(np: Any, values: Any) -> tuple[Any, Any]:

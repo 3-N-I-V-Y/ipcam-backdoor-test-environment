@@ -1,0 +1,15 @@
+[Unit]
+Description=NDR 10s sequence dataset collector
+After=default.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/workspace/ipcam-backdoor-test-environment
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 scripts/collect_sequence_dataset.py resume --config configs/sequence_collection_10s_24h.json --retry-failed --finalize
+TimeoutStartSec=36h
+Restart=on-failure
+RestartSec=10min
+
+[Install]
+WantedBy=default.target

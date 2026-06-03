@@ -1,0 +1,70 @@
+{
+  "accuracy": 0.8860877684407096,
+  "confusion_matrix": [
+    [
+      835,
+      39
+    ],
+    [
+      83,
+      114
+    ]
+  ],
+  "confusion_matrix_labels": [
+    "normal",
+    "scanning"
+  ],
+  "evaluation_protocol": "run_group_cv_out_of_fold",
+  "f1_score": 0.6514285714285715,
+  "group_cv_context": {
+    "feature_alignment": {
+      "feature_names_path": "models/feature_names_v3_holdout.json",
+      "filled_missing_columns": [],
+      "ignored_input_columns": [
+        "conn_state_entropy",
+        "empty_service_ratio",
+        "established_conn_ratio",
+        "failed_conn_ratio",
+        "rej_ratio",
+        "rst_ratio",
+        "s0_ratio",
+        "service_entropy",
+        "syn_only_ratio",
+        "top_dst_port_ratio",
+        "unique_service_count"
+      ]
+    },
+    "group_column": "run_id",
+    "group_count": 22,
+    "inputs": [
+      "ipcam-scan-subtype-60s-train.csv",
+      "ipcam-scan-subtype-60s-test.csv"
+    ],
+    "n_splits": 5
+  },
+  "limitations": [
+    "The saved final model is trained on all provided real rows.",
+    "The metrics are out-of-fold estimates from group-separated CV, not predictions from the final all-row model on a separate holdout.",
+    "Use these metrics as operational generalization evidence only when group coverage matches the deployment environment."
+  ],
+  "precision": 0.7450980392156863,
+  "prediction_threshold": 0.8,
+  "recall": 0.5786802030456852,
+  "roc_auc": 0.8736801449662559,
+  "test_label_distribution": {
+    "0": 874,
+    "1": 197
+  },
+  "test_shape": [
+    1071,
+    22
+  ],
+  "train_label_distribution": {
+    "0": 874,
+    "1": 197
+  },
+  "train_shape": [
+    1071,
+    22
+  ]
+}

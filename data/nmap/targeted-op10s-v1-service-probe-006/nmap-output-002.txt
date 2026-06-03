@@ -1,0 +1,47 @@
+Starting Nmap 7.98 ( https://nmap.org ) at 2026-06-02 16:30 +0000
+Nmap scan report for control-server (172.18.0.3)
+Host is up (0.00060s latency).
+
+PORT     STATE  SERVICE        VERSION
+80/tcp   closed http
+8080/tcp open   http           Uvicorn
+8090/tcp closed opsmessaging
+8091/tcp closed jamlink
+8554/tcp closed rtsp-alt
+8888/tcp closed sun-answerbook
+
+Nmap scan report for nvr-console (172.18.0.5)
+Host is up (0.00049s latency).
+
+PORT     STATE  SERVICE        VERSION
+80/tcp   closed http
+8080/tcp closed http-proxy
+8090/tcp closed opsmessaging
+8091/tcp open   http           Uvicorn
+8554/tcp closed rtsp-alt
+8888/tcp closed sun-answerbook
+
+Nmap scan report for mediamtx (172.18.0.2)
+Host is up (0.00042s latency).
+
+PORT     STATE  SERVICE      VERSION
+80/tcp   closed http
+8080/tcp closed http-proxy
+8090/tcp closed opsmessaging
+8091/tcp closed jamlink
+8554/tcp open   http         IDentifier NameTracer Pro httpd
+8888/tcp open   http         Golang net/http server
+
+Nmap scan report for camera-app (172.18.0.4)
+Host is up (0.00055s latency).
+
+PORT     STATE  SERVICE        VERSION
+80/tcp   closed http
+8080/tcp closed http-proxy
+8090/tcp open   http           Uvicorn
+8091/tcp closed jamlink
+8554/tcp closed rtsp-alt
+8888/tcp closed sun-answerbook
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 4 IP addresses (4 hosts up) scanned in 33.26 seconds

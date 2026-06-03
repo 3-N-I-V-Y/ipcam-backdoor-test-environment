@@ -1,0 +1,136 @@
+{% extends "layout.html" %} {% block content %}
+<section class="section-heading">
+  <div>
+    <span class="eyebrow">기기 상태</span>
+    <h2>연결된 기기 상태</h2>
+    <p>
+      NVR에 등록된 기기를 기준으로 최근 비콘 수신 여부를 확인합니다. 각 기기는
+      독립적으로 Alive 또는 Offline 상태를 표시합니다.
+    </p>
+  </div>
+  <div class="status-summary">
+    <span class="badge {{ control_overview.channel_status }}"
+      >{{ control_overview.channel_status_label }}</span
+    >
+  </div>
+</section>
+
+<section class="panel-grid">
+  <article class="panel wide">
+    <div class="panel-heading">
+      <h3>전체 요약</h3>
+      <span class="chip">{{ control_overview.heartbeat_ttl_seconds|int }}s TTL</span>
+    </div>
+    {% if not control_overview.healthy %}
+    <p class="empty-state">
+      Control server unavailable: {{ control_overview.error }}
+    </p>
+    {% endif %}
+    <div class="list">
+      <div class="list-row">
+        <div>
+          <strong>{{ control_overview.channel_status_label }}</strong>
+          <p>{{ control_overview.channel_status_hint }}</p>
+        </div>
+        <div class="status-stack">
+          <span>{{ control_overview.active_camera_count }}</span>
+          <small>alive devices</small>
+        </div>
+      </div>
+      <div class="list-row">
+        <div>
+          <strong>대기 중인 작업</strong>
+          <p>등록된 기기가 아직 수신하지 않은 제어 작업</p>
+        </div>
+        <div class="status-stack">
+          <span>{{ control_overview.pending_tasks_count }}</span>
+          <small>{{ control_overview.recent_results_count }} recent results</small>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <article class="panel wide">
+    <div class="panel-heading">
+      <h3>연결된 기기</h3>
+      <span class="chip">{{ control_overview.camera_health|length }} devices</span>
+    </div>
+    <div class="list">
+      {% if control_overview.camera_health %} {% for camera_health in
+      control_overview.camera_health %}
+      <div class="list-row" id="{{ camera_health.fragment_id }}">
+        <div>
+          <strong>{{ camera_health.display_name }}</strong>
+          <p>
+            {{ camera_health.camera_id }}{% if camera_health.location %} / {{
+            camera_health.location }}{% endif %}
+          </p>
+          <p>
+            stream={{ camera_health.stream_status }} / recording={{
+            camera_health.recording_mode }}
+          </p>
+        </div>
+        <div class="status-stack">
+          <span class="badge {{ camera_health.status }}"
+            >{{ camera_health.label }}</span
+          >
+          <small>last beacon {{ camera_health.last_beacon_age_label }}</small>
+          <small><a href="{{ camera_health.detail_href }}">상세 상태</a></small>
+        </div>
+      </div>
+      {% endfor %} {% else %}
+      <p class="empty-state">No registered devices.</p>
+      {% endif %}
+    </div>
+  </article>
+
+  <article class="panel wide">
+    <div class="panel-heading">
+      <h3>최근 비콘</h3>
+    </div>
+    <div class="list">
+      {% if control_overview.recent_beacons %} {% for beacon in
+      control_overview.recent_beacons %}
+      <div class="list-row">
+        <div>
+          <strong>{{ beacon.camera_id }}</strong>
+          <p>{{ beacon.stream_state }} / {{ beacon.source_kind }}</p>
+        </div>
+        <div class="status-stack">
+          <span>{{ beacon.lab_mode }}</span>
+          <small>{{ beacon.received_at }}</small>
+        </div>
+      </div>
+      {% endfor %} {% else %}
+      <p class="empty-state">No beacons received yet.</p>
+      {% endif %}
+    </div>
+  </article>
+
+  <article class="panel wide">
+    <div class="panel-heading">
+      <h3>작업 결과</h3>
+    </div>
+    <div class="list">
+      {% if control_overview.recent_results %} {% for result in
+      control_overview.recent_results %}
+      <div class="list-row">
+        <div>
+          <strong>{{ result.camera_id }} - {{ result.command }}</strong>
+          <p>
+            {{ "success" if result.success else "failed" }}{% if result.error
+            %}: {{ result.error }}{% endif %}
+          </p>
+        </div>
+        <div class="status-stack">
+          <span>{{ result.task_id }}</span>
+          <small>{{ result.received_at }}</small>
+        </div>
+      </div>
+      {% endfor %} {% else %}
+      <p class="empty-state">No results reported yet.</p>
+      {% endif %}
+    </div>
+  </article>
+</section>
+{% endblock %}

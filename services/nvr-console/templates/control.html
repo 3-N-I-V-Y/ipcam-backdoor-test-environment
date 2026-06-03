@@ -6,8 +6,12 @@
     <p>
       카메라 인프라와 정상 관제 서버 간의 승인된 작업 및 제어 비컨 통신
       내역입니다. 추후 적용될 NDR 로직에서는 이 통신 기록이 정상 트래픽
-      기준(Baseline)으로 활용됩니다.
+      기준(Baseline)으로 활용됩니다. 기기별 alive 상태는 기기 상태 페이지에서
+      확인합니다.
     </p>
+  </div>
+  <div class="status-summary">
+    <a class="secondary-button" href="/devices/status">기기 상태 보기</a>
   </div>
 </section>
 
@@ -20,14 +24,14 @@
     <div class="list">
       <div class="list-row">
         <div>
-          <strong>Recent beacons</strong>
-          <p>카메라 생존 신호 및 상태 동기화 활동 모니터링</p>
+          <strong>기기 생존 상태</strong>
+          <p>최근 비콘 수신 시각 기준 health 체크</p>
         </div>
         <div class="status-stack">
-          <span>{{ control_overview.recent_beacons_count }}</span>
-          <small
-            >{{ control_overview.active_camera_count }} active cameras</small
+          <span class="badge {{ control_overview.channel_status }}"
+            >{{ control_overview.channel_status_label }}</span
           >
+          <small>{{ control_overview.channel_status_hint }}</small>
         </div>
       </div>
       <div class="list-row">
@@ -50,10 +54,24 @@
 
   <article class="panel">
     <div class="panel-heading">
-      <h3>연동된 카메라</h3>
+      <h3>연동된 기기</h3>
     </div>
     <div class="list">
-      {% for camera in cameras %}
+      {% if control_overview.camera_health %} {% for camera_health in
+      control_overview.camera_health %}
+      <a class="list-row list-link" href="{{ camera_health.status_href }}">
+        <div>
+          <strong>{{ camera_health.display_name }}</strong>
+          <p>{{ camera_health.camera_id }}</p>
+        </div>
+        <div class="status-stack">
+          <span class="badge {{ camera_health.status }}"
+            >{{ camera_health.label }}</span
+          >
+          <small>last beacon {{ camera_health.last_beacon_age_label }}</small>
+        </div>
+      </a>
+      {% endfor %} {% else %} {% for camera in cameras %}
       <div class="list-row">
         <div>
           <strong>{{ camera.display_name }}</strong>
@@ -68,7 +86,7 @@
           >
         </div>
       </div>
-      {% endfor %}
+      {% endfor %} {% endif %}
     </div>
   </article>
 

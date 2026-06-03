@@ -1,0 +1,35 @@
+Starting Nmap 7.98 ( https://nmap.org ) at 2026-06-02 16:55 +0000
+Nmap scan report for mediamtx (172.18.0.2)
+Host is up (0.000031s latency).
+
+PORT     STATE  SERVICE
+53/udp   closed domain
+123/udp  closed ntp
+161/udp  closed snmp
+1900/udp closed upnp
+5353/udp closed zeroconf
+MAC Address: 92:72:81:60:15:B7 (Unknown)
+
+Nmap scan report for control-server (172.18.0.3)
+Host is up (0.000053s latency).
+
+PORT     STATE  SERVICE
+53/udp   closed domain
+123/udp  closed ntp
+161/udp  closed snmp
+1900/udp closed upnp
+5353/udp closed zeroconf
+MAC Address: C2:F2:6C:C3:C1:2F (Unknown)
+
+Nmap scan report for nvr-console (172.18.0.5)
+Host is up (0.000024s latency).
+
+PORT     STATE  SERVICE
+53/udp   closed domain
+123/udp  closed ntp
+161/udp  closed snmp
+1900/udp closed upnp
+5353/udp closed zeroconf
+MAC Address: E2:F1:48:71:61:56 (Unknown)
+
+Nmap done: 3 IP addresses (3 hosts up) scanned in 3.92 seconds

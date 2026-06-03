@@ -1,0 +1,30 @@
+{
+  "features": [
+    "flow_count",
+    "unique_dst_count",
+    "unique_dst_port_count",
+    "dst_port_entropy",
+    "proto_entropy",
+    "short_flow_ratio",
+    "small_response_ratio",
+    "zero_dst_bytes_ratio",
+    "avg_duration",
+    "median_duration",
+    "avg_src_bytes",
+    "avg_dst_bytes",
+    "avg_total_bytes",
+    "bytes_out_in_ratio",
+    "pkts_out_in_ratio",
+    "inter_flow_time_mean",
+    "inter_flow_time_std",
+    "tcp_flow_ratio",
+    "udp_flow_ratio",
+    "dst_port_well_known_ratio",
+    "dst_port_registered_ratio",
+    "dst_port_ephemeral_ratio"
+  ],
+  "label_map": {
+    "normal": 0,
+    "scanning": 1
+  }
+}

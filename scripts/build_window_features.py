@@ -78,6 +78,28 @@ OUTPUT_FIELDS = [
     "dst_port_well_known_ratio",
     "dst_port_registered_ratio",
     "dst_port_ephemeral_ratio",
+    "rolling_3_flow_count_sum",
+    "rolling_3_unique_dst_count",
+    "rolling_3_unique_dst_port_count",
+    "rolling_3_failed_conn_ratio",
+    "rolling_3_rej_ratio",
+    "rolling_3_s0_ratio",
+    "rolling_3_short_flow_ratio",
+    "rolling_3_zero_dst_bytes_ratio",
+    "rolling_3_dst_port_entropy",
+    "rolling_3_avg_duration",
+    "rolling_3_avg_total_bytes",
+    "rolling_6_flow_count_sum",
+    "rolling_6_unique_dst_count",
+    "rolling_6_unique_dst_port_count",
+    "rolling_6_failed_conn_ratio",
+    "rolling_6_rej_ratio",
+    "rolling_6_s0_ratio",
+    "rolling_6_short_flow_ratio",
+    "rolling_6_zero_dst_bytes_ratio",
+    "rolling_6_dst_port_entropy",
+    "rolling_6_avg_duration",
+    "rolling_6_avg_total_bytes",
 ]
 
 
@@ -116,6 +138,8 @@ class GroundTruthEvent:
     port: int | None = None
     proto: str | None = None
     result: str | None = None
+    source_ip: str | None = None
+    target_ip: str | None = None
 
 
 @dataclass(slots=True)
@@ -317,22 +341,25 @@ def main() -> None:
         include_empty=args.include_empty,
     )
     truth_events = load_ground_truth(args.ground_truth, run_id=run_id) if args.ground_truth else []
+    resolve_event_endpoint_ips(truth_events, flows)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with args.output.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=OUTPUT_FIELDS)
-        writer.writeheader()
-        for (src_ip, _), window in sorted(
-            windows.items(), key=lambda item: (item[1].start_ts, item[0][0])
-        ):
-            label, scan_subtype, phases, technique_ids, selected_scenario_id = label_for_window(
-                window,
-                truth_events=truth_events,
-                default_label=args.default_label,
-                default_scenario_id=scenario_id,
-            )
-            writer.writerow(
-                window.to_row(
+    rows = []
+    for (src_ip, _), window in sorted(
+        windows.items(), key=lambda item: (item[1].start_ts, item[0][0])
+    ):
+        label, scan_subtype, phases, technique_ids, selected_scenario_id = label_for_window(
+            window,
+            src_ip=src_ip,
+            truth_events=truth_events,
+            default_label=args.default_label,
+            default_scenario_id=scenario_id,
+        )
+        rows.append(
+            {
+                "src_ip": src_ip,
+                "window": window,
+                "row": window.to_row(
                     src_entity=entity_id_for(run_id=run_id, src_ip=src_ip),
                     scenario_id=selected_scenario_id,
                     run_id=run_id,
@@ -340,10 +367,65 @@ def main() -> None:
                     scan_subtype=scan_subtype,
                     phases=phases,
                     technique_ids=technique_ids,
-                )
-            )
+                ),
+            }
+        )
+    add_rolling_context(rows)
+
+    with args.output.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=OUTPUT_FIELDS)
+        writer.writeheader()
+        for item in rows:
+            writer.writerow(item["row"])
 
     print(f"wrote {len(windows)} windows to {args.output}")
+
+
+def add_rolling_context(rows: list[dict[str, Any]]) -> None:
+    by_src: dict[str, list[dict[str, Any]]] = {}
+    for item in rows:
+        by_src.setdefault(str(item["src_ip"]), []).append(item)
+
+    for src_rows in by_src.values():
+        src_rows.sort(key=lambda item: item["window"].start_ts)
+        for index, item in enumerate(src_rows):
+            for window_count in (3, 6):
+                history = [
+                    history_item["window"]
+                    for history_item in src_rows[max(0, index - window_count + 1) : index + 1]
+                ]
+                item["row"].update(rolling_values(history, prefix=f"rolling_{window_count}"))
+
+
+def rolling_values(history: list[WindowStats], *, prefix: str) -> dict[str, Any]:
+    flow_count = sum(window.flow_count for window in history)
+    dst_ips = set().union(*(window.dst_ips for window in history)) if history else set()
+    dst_ports = [port for window in history for port in window.dst_ports]
+    durations = [duration for window in history for duration in window.durations]
+    total_bytes = [
+        src_bytes + dst_bytes
+        for window in history
+        for src_bytes, dst_bytes in zip(window.src_bytes, window.dst_bytes)
+    ]
+    return {
+        f"{prefix}_flow_count_sum": flow_count,
+        f"{prefix}_unique_dst_count": len(dst_ips),
+        f"{prefix}_unique_dst_port_count": len(set(dst_ports)),
+        f"{prefix}_failed_conn_ratio": rounded(
+            ratio(sum(window.failed_conn_count for window in history), flow_count)
+        ),
+        f"{prefix}_rej_ratio": rounded(ratio(sum(window.rej_count for window in history), flow_count)),
+        f"{prefix}_s0_ratio": rounded(ratio(sum(window.s0_count for window in history), flow_count)),
+        f"{prefix}_short_flow_ratio": rounded(
+            ratio(sum(window.short_flow_count for window in history), flow_count)
+        ),
+        f"{prefix}_zero_dst_bytes_ratio": rounded(
+            ratio(sum(window.zero_dst_bytes_count for window in history), flow_count)
+        ),
+        f"{prefix}_dst_port_entropy": rounded(entropy(dst_ports)),
+        f"{prefix}_avg_duration": rounded(mean(durations)),
+        f"{prefix}_avg_total_bytes": rounded(mean(total_bytes)),
+    }
 
 
 def read_flows(path: Path) -> list[Flow]:
@@ -504,6 +586,7 @@ def load_ground_truth(path: Path, *, run_id: str) -> list[GroundTruthEvent]:
 def label_for_window(
     window: WindowStats,
     *,
+    src_ip: str,
     truth_events: list[GroundTruthEvent],
     default_label: str,
     default_scenario_id: str,
@@ -511,7 +594,7 @@ def label_for_window(
     matches = [
         event
         for event in truth_events
-        if window_matches_event(window, event)
+        if window_matches_event(window, src_ip, event)
     ]
     if not matches:
         return default_label, subtype_for_label(default_label, set()), set(), set(), default_scenario_id
@@ -533,12 +616,73 @@ def label_for_window(
     return label, scan_subtype, phases, technique_ids, scenario_ids[0] if scenario_ids else default_scenario_id
 
 
-def window_matches_event(window: WindowStats, event: GroundTruthEvent) -> bool:
+def window_matches_event(window: WindowStats, src_ip: str, event: GroundTruthEvent) -> bool:
+    if event.source_ip and src_ip != event.source_ip:
+        return False
     if not intervals_overlap(window.start_ts, window.end_ts, event.start_ts, event.end_ts):
+        return False
+    if event.target_ip and event.target_ip not in window.dst_ips:
         return False
     if event.port is not None and event.port not in window.dst_ports:
         return False
     if event.proto and event.proto.lower() not in {proto.lower() for proto in window.protos}:
+        return False
+    return True
+
+
+def resolve_event_endpoint_ips(events: list[GroundTruthEvent], flows: list[Flow]) -> None:
+    if not events or not flows:
+        return
+
+    source_counts: dict[str, Counter[str]] = {}
+    for event in events:
+        if not event.source:
+            continue
+        for flow in flows:
+            if flow_matches_event(flow, event):
+                source_counts.setdefault(event.source, Counter())[flow.src_ip] += 1
+
+    source_ips = {
+        source: counts.most_common(1)[0][0]
+        for source, counts in source_counts.items()
+        if counts
+    }
+
+    target_counts: dict[str, Counter[str]] = {}
+    for event in events:
+        source_ip = source_ips.get(event.source or "")
+        if not event.target:
+            continue
+        for flow in flows:
+            if source_ip and flow.src_ip != source_ip:
+                continue
+            if flow_matches_event(flow, event):
+                target_counts.setdefault(event.target, Counter())[flow.dst_ip] += 1
+
+    target_ips = {
+        target: counts.most_common(1)[0][0]
+        for target, counts in target_counts.items()
+        if counts
+    }
+
+    for event in events:
+        if event.source:
+            event.source_ip = source_ips.get(event.source)
+        if event.target:
+            event.target_ip = target_ips.get(event.target)
+
+
+def flow_matches_event(flow: Flow, event: GroundTruthEvent) -> bool:
+    flow_end = max(flow.ts + flow.duration, flow.ts)
+    if flow_end == flow.ts:
+        overlaps = event.start_ts <= flow.ts <= event.end_ts
+    else:
+        overlaps = intervals_overlap(flow.ts, flow_end, event.start_ts, event.end_ts)
+    if not overlaps:
+        return False
+    if event.port is not None and flow.dst_port != event.port:
+        return False
+    if event.proto and flow.proto.lower() != event.proto.lower():
         return False
     return True
 

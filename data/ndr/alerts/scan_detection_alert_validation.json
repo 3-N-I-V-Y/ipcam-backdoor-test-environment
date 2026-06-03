@@ -1,0 +1,87 @@
+{
+  "alert_count": 380,
+  "alerts": "data/ndr/alerts/scan_detection_alerts.jsonl",
+  "checks": [
+    {
+      "details": {
+        "path": "data/ndr/alerts/scan_detection_alerts.jsonl"
+      },
+      "name": "alerts_file_exists",
+      "passed": true
+    },
+    {
+      "details": {
+        "path": "data/ndr/alerts/scan_detection_summary.json"
+      },
+      "name": "summary_file_exists",
+      "passed": true
+    },
+    {
+      "details": {
+        "alert_count": 380
+      },
+      "name": "alerts_non_empty",
+      "passed": true
+    },
+    {
+      "details": {
+        "failure_count": 0,
+        "sample_failures": []
+      },
+      "name": "all_alert_records_valid",
+      "passed": true
+    },
+    {
+      "details": {
+        "forbidden_keys": [
+          "dst_ip",
+          "id.orig_h",
+          "id.resp_h",
+          "src_ip"
+        ]
+      },
+      "name": "no_raw_identity_keys",
+      "passed": true
+    },
+    {
+      "details": {
+        "jsonl_alerts": 380,
+        "summary_alerts": 380
+      },
+      "name": "summary_alert_count_matches_jsonl",
+      "passed": true
+    },
+    {
+      "details": {
+        "jsonl": {
+          "critical": 369,
+          "high": 10,
+          "medium": 1
+        },
+        "summary": {
+          "critical": 369,
+          "high": 10,
+          "medium": 1
+        }
+      },
+      "name": "summary_severity_counts_match_jsonl",
+      "passed": true
+    },
+    {
+      "details": {},
+      "name": "summary_documents_raw_ip_exclusion",
+      "passed": true
+    }
+  ],
+  "limitations": [
+    "This validates alert schema and output contract, not model performance.",
+    "Smoke alert counts are not operational detection metrics."
+  ],
+  "passed": true,
+  "severity_counts": {
+    "critical": 369,
+    "high": 10,
+    "medium": 1
+  },
+  "summary": "data/ndr/alerts/scan_detection_summary.json"
+}

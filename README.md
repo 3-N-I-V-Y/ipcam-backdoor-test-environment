@@ -192,6 +192,22 @@ Invoke-RestMethod http://localhost:8080/results | ConvertTo-Json -Depth 8
 - poller 상태
 - 최근 beacon / pending task / recent result
 
+## NDR sequence 데이터 수집
+
+리눅스 서버에서 GRU/LSTM용 10초 window sequence를 장기 수집하려면
+`docs/sequence-collection.md`를 사용합니다. Zeek는 Docker 이미지로 실행되며,
+수집 상태는 checkpoint 파일로 재개할 수 있습니다.
+
+```bash
+python3 scripts/collect_sequence_dataset.py plan \
+  --config configs/sequence_collection_10s_24h.json
+
+python3 scripts/collect_sequence_dataset.py resume \
+  --config configs/sequence_collection_10s_24h.json \
+  --retry-failed \
+  --finalize
+```
+
 ## Safe task 테스트
 
 NVR 카메라 상세 화면에서 직접 실행하거나, API로 테스트할 수 있습니다.
@@ -386,7 +402,7 @@ RUN_MODE=local ./services/camera-app/run-local.sh
 - 다중 카메라 등록 UI 없음
 - `rogue-control-server` 없음
 - abnormal control channel 시나리오 아직 없음
-- NDR 탐지 엔진 아직 없음
+- NDR 탐지는 현재 배치형 scan-detection adapter(`scripts/run_ndr_scan_detection.py`)와 모델 번들 검증 단계까지만 있음. 상시 서비스/대시보드 통합과 운영 readiness gate 통과는 아직 남아 있음
 
 ## 권장 다음 단계
 
@@ -404,8 +420,8 @@ RUN_MODE=local ./services/camera-app/run-local.sh
 2. `camera-app`에 secondary/rogue 채널 붙이기
 3. `scenario_id`, `run_id` 같은 ground truth 저장
 4. abnormal beacon/poll 시나리오 추가
-5. NDR 규칙 또는 MVP 구현
-6. 탐지 검증
+5. NDR batch adapter 결과를 상시 서비스 또는 대시보드로 연결
+6. 운영 볼륨 real 데이터 수집 후 탐지 검증
 
 ## 체크리스트
 

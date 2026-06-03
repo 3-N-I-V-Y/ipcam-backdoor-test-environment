@@ -1,0 +1,255 @@
+{
+  "artifact_sha256": {
+    "feature_names.json": "8660691d3501156cf921d0a23cbc3ab206d562ed4796f01306b1e6fda7b724f7",
+    "metrics.json": "39e4a4974a9c6b4ce38a27c4413988ca30b40f9b260285b802fba7eb6a3c9377",
+    "model.json": "4e95a2f03f45fa5ac27a5a8822cb724f9c3eab3c0f3e60f38e354fb31a93ac78",
+    "model.pkl": "d1718fe056f56df3751074c22787ee007d7780f72bf6d515417b786babf5148b",
+    "predict_xgb_scan_detection.py": "9fbc47d13eaad4c0ae5a29574532d20169e353e128dfc97182916a9e4e0c1a8d"
+  },
+  "bundle_dir": "../ipcam-backdoor-test-environment/data/models/xgboost-scan-detection-groupcv-ndr-ml",
+  "bundle_name": "xgboost-scan-detection-groupcv-ndr-ml",
+  "created_at": "2026-05-30T12:13:09.228293+00:00",
+  "feature_columns": [
+    "flow_count",
+    "unique_dst_count",
+    "unique_dst_port_count",
+    "dst_port_entropy",
+    "proto_entropy",
+    "short_flow_ratio",
+    "small_response_ratio",
+    "zero_dst_bytes_ratio",
+    "avg_duration",
+    "median_duration",
+    "avg_src_bytes",
+    "avg_dst_bytes",
+    "avg_total_bytes",
+    "bytes_out_in_ratio",
+    "pkts_out_in_ratio",
+    "inter_flow_time_mean",
+    "inter_flow_time_std",
+    "tcp_flow_ratio",
+    "udp_flow_ratio",
+    "dst_port_well_known_ratio",
+    "dst_port_registered_ratio",
+    "dst_port_ephemeral_ratio"
+  ],
+  "feature_count": 22,
+  "label_map": {
+    "normal": 0,
+    "scanning": 1
+  },
+  "model_type": "xgboost_binary_scan_detection",
+  "prediction_threshold": 0.8,
+  "readiness": {
+    "checks": [
+      {
+        "details": {
+          "feature_count": 22
+        },
+        "name": "feature_schema_present",
+        "passed": true
+      },
+      {
+        "details": {
+          "leaked_features": []
+        },
+        "name": "no_leakage_or_identity_features",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 0.7450980392156863,
+          "required": 0.9
+        },
+        "name": "metric_precision_gate",
+        "passed": false
+      },
+      {
+        "details": {
+          "actual": 0.5786802030456852,
+          "required": 0.9
+        },
+        "name": "metric_recall_gate",
+        "passed": false
+      },
+      {
+        "details": {
+          "actual": 0.6514285714285715,
+          "required": 0.9
+        },
+        "name": "metric_f1_gate",
+        "passed": false
+      },
+      {
+        "details": {
+          "actual": 0.8736801449662559,
+          "required": 0.95
+        },
+        "name": "metric_roc_auc_gate",
+        "passed": false
+      },
+      {
+        "details": {
+          "actual": 0.04462242562929062,
+          "required": 0.05
+        },
+        "name": "metric_false_positive_rate_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "fn": 83,
+          "fp": 39,
+          "tn": 835,
+          "tp": 114
+        },
+        "name": "confusion_matrix_present",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 1071,
+          "required": 500
+        },
+        "name": "train_row_volume_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 1071,
+          "required": 200
+        },
+        "name": "test_row_volume_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "is_insufficient": true,
+          "total_samples": 1071
+        },
+        "name": "data_sufficiency_report_available",
+        "passed": true
+      },
+      {
+        "details": {
+          "modes": [
+            "real+synthetic",
+            "real-only",
+            "synthetic-only"
+          ]
+        },
+        "name": "source_separated_evaluation_available",
+        "passed": true
+      },
+      {
+        "details": {
+          "group_count": 22,
+          "n_splits": 5,
+          "rows": 1071
+        },
+        "name": "group_cv_evaluation_available",
+        "passed": true
+      },
+      {
+        "details": {
+          "group_overlap_between_train_and_test": false
+        },
+        "name": "group_cv_no_group_overlap",
+        "passed": true
+      },
+      {
+        "details": {
+          "raw_identity_features": []
+        },
+        "name": "group_cv_no_raw_identity_features",
+        "passed": true
+      },
+      {
+        "details": {
+          "bundle_feature_count": 22,
+          "extra_in_group_cv": [],
+          "group_cv_feature_count": 22,
+          "missing_from_group_cv": [],
+          "same_order": true
+        },
+        "name": "group_cv_feature_schema_matches_bundle",
+        "passed": true
+      },
+      {
+        "details": {
+          "min_train_rows_per_fold": 816,
+          "out_of_fold_rows": 1071,
+          "required_oof_rows": 200,
+          "required_train_rows": 500
+        },
+        "name": "group_cv_volume_gate",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": 0.7450980392156863,
+          "required": 0.9
+        },
+        "name": "group_cv_metric_precision_gate",
+        "passed": false
+      },
+      {
+        "details": {
+          "actual": 0.5786802030456852,
+          "required": 0.9
+        },
+        "name": "group_cv_metric_recall_gate",
+        "passed": false
+      },
+      {
+        "details": {
+          "actual": 0.6514285714285715,
+          "required": 0.9
+        },
+        "name": "group_cv_metric_f1_gate",
+        "passed": false
+      },
+      {
+        "details": {
+          "actual": 0.8736801449662559,
+          "required": 0.95
+        },
+        "name": "group_cv_metric_roc_auc_gate",
+        "passed": false
+      },
+      {
+        "details": {
+          "actual": 0.04462242562929062,
+          "required": 0.05
+        },
+        "name": "group_cv_false_positive_rate_gate",
+        "passed": true
+      }
+    ],
+    "gates": {
+      "max_false_positive_rate": 0.05,
+      "min_f1_score": 0.9,
+      "min_precision": 0.9,
+      "min_recall": 0.9,
+      "min_roc_auc": 0.95,
+      "min_test_rows_for_operational_claim": 200,
+      "min_train_rows_for_operational_claim": 500
+    },
+    "lab_integration_ready": false,
+    "notes": [
+      "Lab integration means the model bundle has usable artifacts, stable feature schema, and real-test metrics above gates.",
+      "Operational ready additionally requires stronger train/test volume, source-separated real/synthetic evaluation evidence, and group-separated real-only evaluation when available.",
+      "Synthetic data must not be used to inflate final real-only performance claims."
+    ],
+    "operational_ready": false
+  },
+  "source_artifacts": {
+    "data_report": "models/data_sufficiency_report.json",
+    "feature_names": "models/group_cv_evaluation/final_feature_names.json",
+    "group_cv_evaluation": "models/group_cv_evaluation/group_cv_report.json",
+    "metrics": "models/group_cv_evaluation/final_model_metrics.json",
+    "model_json": "models/group_cv_evaluation/final_model.json",
+    "model_pkl": "models/group_cv_evaluation/final_model.pkl",
+    "source_evaluation": "models/source_evaluations/source_evaluation_report.json"
+  }
+}

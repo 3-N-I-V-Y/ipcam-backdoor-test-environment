@@ -38,8 +38,11 @@ fi
 echo "$BR"
 ```
 
-If Docker Desktop does not expose the bridge interface on the host, capture from
-the `camera-app` network namespace or run packet capture inside the Docker VM.
+If Docker Desktop does not expose the bridge interface on the host, use the
+Docker host-mode tcpdump sidecar in `scripts/collect_nmap_run.py` or run packet
+capture inside the Docker VM. In WSL/Docker Desktop, a tcpdump sidecar that
+shares the `camera-app` namespace can miss the nmap TCP flows even though nmap
+itself succeeds.
 
 ## 3) Capture Packets
 
@@ -79,9 +82,15 @@ It also stores raw nmap output under:
 data/nmap/<run_id>/nmap-output.txt
 ```
 
-For Docker Desktop, prefer `scripts/collect_nmap_run.py`. It starts a tcpdump
-sidecar in the `camera-app` network namespace, runs nmap in that same namespace,
-then writes:
+For Docker Desktop/WSL, prefer `scripts/collect_nmap_run.py`. It runs nmap from
+the `camera-app` network namespace so the scan source stays the camera IP, and
+by default captures from Docker host networking with a tcpdump sidecar filtered
+to that camera IP. This preserves the scan TCP packets for Zeek and labeling.
+The older same-namespace capture mode is still available with
+`--capture-network-mode container` for native environments where it is known to
+work. The default capture filter is
+`tcp or (udp and not port 8000 and not port 8001)` so high-volume RTP/RTCP media
+does not hide short nmap control bursts. The helper writes:
 
 ```text
 data/pcap/<run_id>.pcap
@@ -237,7 +246,7 @@ docker compose up -d --build --force-recreate
 docker compose exec camera-app python scenario_traffic.py \
   --mode udp_scan \
   --targets mediamtx,control-server,nvr-console \
-  --ports 53,123,161,8000,8001 \
+  --ports 53,123,161,1900,5353 \
   --interval-seconds 1 \
   --timeout-seconds 1
 ```
@@ -250,7 +259,7 @@ python3 scripts/run_nmap_scenario.py \
   --scenario-id udp-scan \
   --scan-type udp \
   --targets mediamtx,control-server,nvr-console \
-  --ports 53,123,161,8000,8001
+  --ports 53,123,161,1900,5353
 ```
 
 ### Low and Slow with Nmap
@@ -305,6 +314,179 @@ horizontal-scan-001, horizontal-scan-002
 service-probe-001, service-probe-002
 udp-scan-001, udp-scan-002
 ```
+
+### Bulk Collection Helper
+
+For WSL/Docker Desktop environments, use the bulk helper to collect repeated
+runs without host Zeek or host tcpdump. It runs nmap from the `camera-app`
+network namespace, captures with Docker host-mode tcpdump by default, converts
+each pcap with the `zeek/zeek:latest` Docker image, and rebuilds the run-based
+dataset. The default capture filter excludes MediaMTX UDP ports 8000/8001 while
+keeping TCP, DNS, scan UDP, and control traffic.
+
+Dry run:
+
+```bash
+python3 scripts/collect_bulk_scan_dataset.py \
+  --dry-run \
+  --run-prefix bulk \
+  --baseline-repeats 3 \
+  --attack-repeats 3
+```
+
+Estimate the operational-volume collection plan without Docker access:
+
+```bash
+python3 scripts/collect_bulk_scan_dataset.py \
+  --estimate-only \
+  --run-prefix bulk \
+  --scenario-log-root data/scenarios/generated \
+  --baseline-repeats 8 \
+  --attack-repeats 8 \
+  --baseline-seconds 1200 \
+  --attack-duration-seconds 1200 \
+  --attack-interval-seconds 20 \
+  --capture-network-mode host \
+  --long-capture-scenario vertical-scan \
+  --long-capture-scenario horizontal-scan \
+  --long-capture-scenario service-probe \
+  --long-capture-scenario udp-scan \
+  --test-repeat 7 \
+  --test-repeat 8
+```
+
+This writes:
+
+```text
+data/features/datasets/bulk-collection-plan.json
+data/features/datasets/bulk-collection-plan.md
+```
+
+With the command below, the current estimate is 780 train windows and 260 test
+windows, passing the 500/200 operational volume gate. Estimated sequential time
+is about 17.3 hours. Treat this as a planning estimate only; actual usable
+windows must be verified after Zeek conversion and dataset build.
+
+Actual collection:
+
+```bash
+python3 scripts/collect_bulk_scan_dataset.py \
+  --compose-up \
+  --skip-existing \
+  --run-prefix bulk \
+  --scenario-log-root data/scenarios/generated \
+  --baseline-repeats 8 \
+  --attack-repeats 8 \
+  --baseline-seconds 1200 \
+  --attack-duration-seconds 1200 \
+  --attack-interval-seconds 20 \
+  --capture-network-mode host \
+  --long-capture-scenario vertical-scan \
+  --long-capture-scenario horizontal-scan \
+  --long-capture-scenario service-probe \
+  --long-capture-scenario udp-scan \
+  --test-repeat 7 \
+  --test-repeat 8
+```
+
+This command is intentionally long. It targets at least 500 real train windows
+and 200 real test windows at the default 60-second window size while preserving
+run-based split boundaries. `low-and-slow` is included as a scenario but is not
+put in the repeated long-capture list because the nmap profile already uses
+`--scan-delay 60s`.
+
+The helper supports shorter pilot runs, but do not use those pilot metrics as
+operational readiness evidence:
+
+```bash
+python3 scripts/collect_bulk_scan_dataset.py \
+  --compose-up \
+  --skip-existing \
+  --run-prefix pilot \
+  --scenario-log-root data/scenarios/generated \
+  --baseline-repeats 2 \
+  --attack-repeats 2 \
+  --baseline-seconds 300 \
+  --attack-duration-seconds 300 \
+  --long-capture-scenario vertical-scan \
+  --long-capture-scenario horizontal-scan \
+  --long-capture-scenario service-probe \
+  --long-capture-scenario udp-scan \
+  --test-repeat 2
+```
+
+After the long collection finishes and the train/test CSVs are created, run the
+post-collection ML readiness pipeline from `../ndr-ml`:
+
+```bash
+cd ../ndr-ml
+.venv-wsl/bin/python run_operational_readiness_pipeline.py \
+  --solution-root ../ipcam-backdoor-test-environment
+```
+
+Docker/Zeek path verification can be done with a short isolated output path:
+
+```bash
+python3 scripts/collect_bulk_scan_dataset.py \
+  --compose-up \
+  --skip-pull \
+  --skip-existing \
+  --run-prefix verify-hostcap-fast-v3 \
+  --scenario-log-root data/scenarios/verify-hostcap-fast-v3 \
+  --attack-repeats 1 \
+  --scenario vertical-scan \
+  --scenario horizontal-scan \
+  --scenario service-probe \
+  --scenario udp-scan \
+  --capture-network-mode host \
+  --dataset-output data/features/datasets/verify-hostcap-fast-v3-scan-subtype-60s.csv
+```
+
+The `verify-hostcap-fast-v3` output proves the Docker Compose, host-mode
+tcpdump, Docker Zeek, window feature, and ground-truth label merge path works
+for vertical, horizontal, service probe, and UDP scan subtypes. The helper
+writes
+`data/features/datasets/verify-hostcap-fast-v3-collection-summary.json`.
+It is intentionally too small for performance claims.
+
+Fast pipeline check without the slow low-and-slow run:
+
+```bash
+python3 scripts/collect_bulk_scan_dataset.py \
+  --compose-up \
+  --skip-existing \
+  --run-prefix smoke \
+  --scenario-log-root data/scenarios/generated \
+  --baseline-repeats 1 \
+  --attack-repeats 1 \
+  --baseline-seconds 180 \
+  --scenario baseline \
+  --scenario vertical-scan \
+  --scenario horizontal-scan \
+  --scenario service-probe \
+  --scenario udp-scan
+```
+
+The helper writes generated labels under `data/scenarios/generated` by default
+to avoid permission conflicts with files that may be created by containers.
+
+After collection, copy or export the generated dataset into `../ndr-ml` and
+rerun data diagnosis, source-separated evaluation, run-group CV, bundle export,
+and the readiness audit. Do not reduce `--window-seconds` solely to inflate row
+counts; 60-second windows are the default evidence unit.
+
+The current lab operational candidate uses a 20-second rebuild of the
+`targeted-op10s-v1` captures:
+
+```text
+data/features/datasets/targeted-op20s-v1-scan-subtype-20s.csv
+```
+
+This is not a row-count shortcut. It is paired with endpoint-aware label
+matching in `scripts/build_window_features.py`: ground-truth `source` and
+`target` aliases are resolved to Zeek endpoint IPs before a window is labeled as
+scanning. This removes normal source traffic that only shared the same
+port/proto/time window with a scan event.
 
 ## 7) Build the Dataset
 

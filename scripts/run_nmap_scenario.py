@@ -96,6 +96,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scenario-log-root", type=Path, default=Path("data/scenarios"))
     parser.add_argument("--output-root", type=Path, default=Path("data/nmap"))
     parser.add_argument(
+        "--attempt-index",
+        type=int,
+        default=None,
+        help="Optional repeat index for long captures. Uses nmap-output-XXX.txt when set.",
+    )
+    parser.add_argument(
         "--allowed-target",
         action="append",
         default=[],
@@ -124,7 +130,10 @@ def main() -> None:
     network = args.network or detect_compose_network(args.compose_service)
 
     output_dir = args.output_root / args.run_id
-    output_path = output_dir / "nmap-output.txt"
+    output_name = "nmap-output.txt"
+    if args.attempt_index is not None:
+        output_name = f"nmap-output-{args.attempt_index:03d}.txt"
+    output_path = output_dir / output_name
     command = build_docker_nmap_command(
         image=args.nmap_image,
         network=network,
@@ -166,6 +175,7 @@ def main() -> None:
             "network": network,
             "nmap_image": args.nmap_image,
             "command": command,
+            "attempt_index": args.attempt_index,
         },
     )
     for target in targets:
@@ -190,6 +200,7 @@ def main() -> None:
                     "scan_type": args.scan_type,
                     "nmap_returncode": result.returncode,
                     "nmap_output": str(output_path),
+                    "attempt_index": args.attempt_index,
                 },
             )
     write_event(
@@ -207,6 +218,7 @@ def main() -> None:
             "scan_type": args.scan_type,
             "returncode": result.returncode,
             "output": str(output_path),
+            "attempt_index": args.attempt_index,
         },
     )
 

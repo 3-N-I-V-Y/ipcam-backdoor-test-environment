@@ -1,0 +1,11 @@
+[Unit]
+Description=Start or resume the NDR sequence collector after boot
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=24h
+Persistent=true
+Unit=ndr-seq-collector.service
+
+[Install]
+WantedBy=timers.target

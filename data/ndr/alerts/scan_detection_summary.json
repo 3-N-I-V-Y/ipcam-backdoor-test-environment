@@ -1,0 +1,23 @@
+{
+  "alert_threshold": 0.8,
+  "alerts_emitted": 380,
+  "alerts_output": "data/ndr/alerts/scan_detection_alerts.jsonl",
+  "created_at": "2026-06-02T17:29:04.687668+00:00",
+  "input": "data/features/datasets/targeted-op20s-v1-scan-subtype-20s.csv",
+  "limitations": [
+    "This adapter converts model predictions into NDR alert records.",
+    "Operational performance still depends on real run-separated evaluation gates.",
+    "Raw src_ip and dst_ip are not emitted by this adapter."
+  ],
+  "model_bundle": "xgboost-scan-detection-ndr-ml",
+  "model_created_at": "2026-06-02T17:28:43.261607+00:00",
+  "model_dir": "data/models/xgboost-scan-detection-ndr-ml",
+  "model_threshold": 0.8,
+  "predictions_output": "data/ndr/predictions/scan_detection_predictions.csv",
+  "rows_scored": 1025,
+  "severity_counts": {
+    "critical": 369,
+    "high": 10,
+    "medium": 1
+  }
+}
